@@ -1,0 +1,28 @@
+export type PromptCategory =
+  | 'Image prompt'
+  | 'Video prompt'
+  | 'Animation prompt'
+  | 'Other'
+  | string;
+
+export interface PromptItem {
+  id: string;
+  title: string;
+  category: PromptCategory;
+  body: string;
+  createdAt: number;
+  updatedAt: number;
+}
+
+export type PromptFormInput = {
+  title: string;
+  category: string;
+  body: string;
+};
+
+export interface StorageStatus {
+  isAvailable: boolean;
+  totalPrompts: number;
+  estimatedBytes: number;
+  error?: string;
+}

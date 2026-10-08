@@ -1,0 +1,34 @@
+# Prompt Vault — MVP Blueprint
+
+TARGET USERS
+Video editors and motion designers
+
+PROBLEM TO SOLVE
+Creative professionals need a quick way to save, find and reuse their image and video prompts.
+
+VERSION 1 FEATURES
+1. Save prompts by category
+2. Search prompts instantly
+3. Copy prompts with one click
+4. Edit and delete saved prompts
+
+STORAGE
+Browser local storage. No login or cloud sync. Data loss and device limitations must be explained.
+
+OUT OF SCOPE
+- AI prompt rewriting
+- Cloud collaboration
+- Automatic video generation
+
+ACCEPTANCE CRITERIA
+- Every selected feature performs its real intended action.
+- Saved data survives browser refresh in the intended storage environment.
+- Empty states and invalid input are handled.
+- Users receive accurate feedback for successes and failures.
+- Interface works on mobile and desktop.
+- Keyboard navigation and accessible labels are tested.
+- No fake buttons, hardcoded success responses or unrelated features.
+- Users are informed that clearing browser data can remove saved records.
+
+PROCESS
+Plan first. Implement one feature at a time. Review diffs and tests. Do not deploy without approval.

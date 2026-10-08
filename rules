@@ -1,0 +1,51 @@
+# Prompt Vault — Agent Project Rules
+
+PROJECT PURPOSE
+Build a small personal prompt library for video editors and motion designers.
+
+APPROVED STACK
+- React, TypeScript and Vite
+- Plain CSS
+- Browser localStorage
+- No backend, authentication, payments or AI APIs
+
+MVP FEATURES
+1. Save prompts with title, category and body text.
+2. Search saved prompts quickly.
+3. Copy prompt text in one click.
+4. Edit and delete prompts.
+
+DESIGN
+- Clean, minimal, responsive layout
+- Clear visual hierarchy and sufficient contrast
+- Accessible keyboard controls, labels and visible focus
+- Helpful empty, success and error states
+
+DATA RULES
+- Use stable unique IDs.
+- Preserve saved data across reloads in the same browser.
+- Validate required fields; do not save blank prompts.
+- Gracefully handle unavailable or full localStorage.
+- Confirm destructive deletion.
+- Do not silently erase or overwrite existing records.
+- Make it clear that browser storage is device/browser-specific and not a backup.
+- Do not include secret credentials in the app.
+
+AGENT WORKFLOW
+1. Inspect the current project before editing.
+2. Work on only one approved milestone at a time.
+3. Explain the plan and files to be changed.
+4. Do not add packages or features without a clear reason.
+5. Preserve working functionality and unrelated files.
+6. Show real verification steps and test results.
+7. Report remaining issues and update the progress notes.
+8. Ask for approval before destructive operations or deployment.
+9. Never describe placeholder behavior as complete functionality.
+
+OUT OF SCOPE
+- User accounts and cloud synchronization
+- AI prompt generation
+- Subscriptions and payments
+- Browser extensions
+- Collaboration
+- Complex category-management systems
