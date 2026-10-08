@@ -4,12 +4,14 @@ import type { PromptItem } from '../types/prompt';
 interface PromptInspectorProps {
   selectedPrompt: PromptItem | null;
   onAppendToken?: (token: string) => void;
+  onToggleVisibility?: (prompt: PromptItem) => void;
   onNotify: (message: string, type?: 'success' | 'error') => void;
 }
 
 export const PromptInspector: React.FC<PromptInspectorProps> = ({
   selectedPrompt,
   onAppendToken,
+  onToggleVisibility,
   onNotify,
 }) => {
   const quickTokens = [
@@ -115,6 +117,31 @@ export const PromptInspector: React.FC<PromptInspectorProps> = ({
               {selectedPrompt?.visibility === 'public' ? '🌐 Public Community' : '🔒 Private Vault'}
             </span>
           </div>
+
+          {selectedPrompt && onToggleVisibility && (
+            <div style={{ paddingTop: '4px' }}>
+              <button
+                type="button"
+                className="btn-toolbar-new"
+                style={{
+                  width: '100%',
+                  justifyContent: 'center',
+                  backgroundColor: selectedPrompt.visibility === 'public' ? 'rgba(255,255,255,0.06)' : 'rgba(0, 240, 255, 0.12)',
+                  color: selectedPrompt.visibility === 'public' ? 'var(--on-surface)' : 'var(--primary-container)',
+                  border: '1px solid var(--border-subtle)',
+                }}
+                onClick={() => onToggleVisibility(selectedPrompt)}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: '15px' }}>
+                  {selectedPrompt.visibility === 'public' ? 'lock' : 'public'}
+                </span>
+                <span>
+                  {selectedPrompt.visibility === 'public' ? 'Switch to Private' : 'Publish as Public'}
+                </span>
+              </button>
+            </div>
+          )}
+
           {selectedPrompt?.authorUsername && (
             <div className="inspector-param-row">
               <span style={{ color: 'var(--outline)' }}>Creator</span>

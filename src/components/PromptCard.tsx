@@ -10,6 +10,7 @@ interface PromptCardProps {
   onToggleFavorite?: (id: string) => void;
   onCopySuccess?: (prompt: PromptItem) => void;
   onFork?: (prompt: PromptItem) => void;
+  onToggleVisibility?: (prompt: PromptItem) => void;
   onNotify: (message: string, type?: 'success' | 'error') => void;
 }
 
@@ -58,6 +59,7 @@ export const PromptCard: React.FC<PromptCardProps> = ({
   onToggleFavorite,
   onCopySuccess,
   onFork,
+  onToggleVisibility,
   onNotify,
 }) => {
   const [copied, setCopied] = useState(false);
@@ -131,15 +133,25 @@ export const PromptCard: React.FC<PromptCardProps> = ({
             {theme.label}
           </span>
           {prompt.visibility && (
-            <span
-              className={`badge-visibility ${prompt.visibility}`}
-              title={prompt.visibility === 'public' ? 'Public Community Prompt' : 'Private Personal Prompt'}
+            <button
+              type="button"
+              className={`badge-visibility ${prompt.visibility} clickable`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleVisibility?.(prompt);
+              }}
+              title={
+                prompt.visibility === 'public'
+                  ? 'Public Community Prompt • Click to make Private'
+                  : 'Private Personal Prompt • Click to make Public'
+              }
+              aria-label="Toggle Public/Private visibility"
             >
               <span className="material-symbols-outlined" style={{ fontSize: '11px' }}>
                 {prompt.visibility === 'public' ? 'public' : 'lock'}
               </span>
               <span>{prompt.visibility === 'public' ? 'Public' : 'Private'}</span>
-            </span>
+            </button>
           )}
           {prompt.authorUsername && prompt.visibility === 'public' && (
             <span className="badge-author" title={`Created by @${prompt.authorUsername}`}>

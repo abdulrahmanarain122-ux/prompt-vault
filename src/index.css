@@ -1256,6 +1256,16 @@ input, textarea, select {
   border-color: var(--border-subtle);
 }
 
+.badge-visibility.clickable {
+  cursor: pointer;
+  transition: all var(--trans-fast);
+}
+
+.badge-visibility.clickable:hover {
+  transform: scale(1.05);
+  filter: brightness(1.2);
+}
+
 .badge-author {
   font-family: var(--font-mono);
   font-size: 10.5px;

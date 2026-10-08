@@ -388,6 +388,52 @@ const AppContent: React.FC = () => {
     }
   };
 
+  const handleToggleVisibility = async (prompt: PromptItem) => {
+    const nextVis: 'public' | 'private' = prompt.visibility === 'public' ? 'private' : 'public';
+
+    if (nextVis === 'public' && !user) {
+      openAuthModal('login');
+      addToast('Please sign in to publish prompts to the Public Community.', 'error');
+      return;
+    }
+
+    try {
+      StorageService.updateVisibility(prompt.id, nextVis);
+      setPrompts((prev) => prev.map((p) => (p.id === prompt.id ? { ...p, visibility: nextVis } : p)));
+
+      if (user) {
+        const { error } = await CloudPromptService.updateCloudPrompt(prompt.id, { visibility: nextVis });
+        if (error) {
+          await CloudPromptService.createCloudPrompt(
+            {
+              title: prompt.title,
+              category: prompt.category,
+              body: prompt.body,
+              engine: prompt.engine,
+              aspectRatio: prompt.aspectRatio,
+              tags: prompt.tags,
+              negativePrompt: prompt.negativePrompt,
+              visibility: nextVis,
+            },
+            user.id
+          );
+        }
+
+        const { data: updatedPublic } = await CloudPromptService.fetchPublicPrompts();
+        if (updatedPublic) setPublicPrompts(updatedPublic);
+      }
+
+      addToast(
+        nextVis === 'public'
+          ? `"${prompt.title}" is now Public Community!`
+          : `"${prompt.title}" is now Private Vault.`,
+        'success'
+      );
+    } catch (err) {
+      addToast('Failed to change visibility', 'error');
+    }
+  };
+
   const handleSyncCloud = async () => {
     if (!user) {
       openAuthModal('login');
@@ -467,6 +513,7 @@ const AppContent: React.FC = () => {
                       onToggleFavorite={handleToggleFavorite}
                       onCopySuccess={handleCopySuccess}
                       onFork={handleForkPrompt}
+                      onToggleVisibility={handleToggleVisibility}
                       onNotify={addToast}
                     />
                   ))}
@@ -587,6 +634,7 @@ const AppContent: React.FC = () => {
             {viewMode !== 'dense' && (
               <PromptInspector
                 selectedPrompt={activePrompt}
+                onToggleVisibility={handleToggleVisibility}
                 onNotify={addToast}
               />
             )}

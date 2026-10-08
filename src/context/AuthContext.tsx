@@ -21,8 +21,12 @@ interface AuthContextType {
   authModalMode: AuthModalMode;
   openAuthModal: (mode?: AuthModalMode) => void;
   closeAuthModal: () => void;
-  signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, password: string, username?: string) => Promise<{ error: Error | null }>;
+  signIn: (email: string, password: string) => Promise<{ error: Error | null; session?: Session | null }>;
+  signUp: (
+    email: string,
+    password: string,
+    username?: string
+  ) => Promise<{ error: Error | null; session?: Session | null; needsConfirmation?: boolean }>;
   signOut: () => Promise<{ error: Error | null }>;
 }
 
@@ -101,8 +105,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signIn = async (email: string, password: string) => {
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      return { error: error as Error | null };
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        if (error.message.toLowerCase().includes('confirm')) {
+          return {
+            error: new Error(
+              'Email not confirmed. Check your inbox or turn off "Confirm Email" in Supabase Dashboard -> Authentication -> Email Provider for instant access.'
+            ),
+          };
+        }
+        return { error: error as Error };
+      }
+      return { error: null, session: data.session };
     } catch (err) {
       return { error: err as Error };
     }
@@ -111,7 +125,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signUp = async (email: string, password: string, username?: string) => {
     try {
       const cleanUsername = username?.trim() || email.split('@')[0];
-      const { error } = await supabase.auth.signUp({
+      const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -121,7 +135,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           },
         },
       });
-      return { error: error as Error | null };
+
+      if (error) {
+        if (error.message.includes('rate limit') || error.message.includes('over_email_send')) {
+          return {
+            error: new Error(
+              'Supabase SMTP rate limit reached. To enable instant registration without limits, turn off "Confirm Email" in Supabase Dashboard -> Authentication -> Email Provider.'
+            ),
+          };
+        }
+        return { error: error as Error };
+      }
+
+      // Check if user already exists in Supabase
+      if (data.user && data.user.identities && data.user.identities.length === 0) {
+        return {
+          error: new Error('An account with this email address already exists. Click "Sign In" above to log in.'),
+        };
+      }
+
+      // Attempt auto-login if session was not returned automatically
+      if (!data.session) {
+        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+          email,
+          password,
+        });
+        if (!signInError && signInData.session) {
+          return { error: null, session: signInData.session, needsConfirmation: false };
+        }
+      }
+
+      return { error: null, session: data.session, needsConfirmation: !data.session };
     } catch (err) {
       return { error: err as Error };
     }

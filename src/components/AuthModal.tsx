@@ -60,16 +60,22 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onNotify }) => {
       if (error) {
         setErrorMessage(error.message || 'Invalid login credentials.');
       } else {
-        onNotify?.('Successfully logged in!', 'success');
+        onNotify?.('Successfully signed in to Vault!', 'success');
         closeAuthModal();
       }
     } else {
-      const { error } = await signUp(email.trim(), password, username.trim());
+      const res = await signUp(email.trim(), password, username.trim());
       setLoading(false);
-      if (error) {
-        setErrorMessage(error.message || 'Registration failed.');
+      if (res.error) {
+        setErrorMessage(res.error.message || 'Registration failed.');
+      } else if (res.needsConfirmation) {
+        onNotify?.(
+          'Account created! Check your inbox to confirm, or turn off "Confirm Email" in Supabase Auth Settings.',
+          'success'
+        );
+        closeAuthModal();
       } else {
-        onNotify?.('Account created successfully! Check your email to confirm if required.', 'success');
+        onNotify?.('Account created and logged in successfully!', 'success');
         closeAuthModal();
       }
     }

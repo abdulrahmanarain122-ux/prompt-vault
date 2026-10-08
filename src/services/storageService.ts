@@ -211,6 +211,22 @@ export const StorageService = {
     return updatedItem;
   },
 
+  updateVisibility(id: string, visibility: 'public' | 'private'): PromptItem | null {
+    const current = this.getAll();
+    const index = current.findIndex((p) => p.id === id);
+    if (index === -1) return null;
+
+    const updatedItem: PromptItem = {
+      ...current[index],
+      visibility,
+      updatedAt: Date.now(),
+    };
+
+    current[index] = updatedItem;
+    this.saveAll(current);
+    return updatedItem;
+  },
+
   toggleFavorite(id: string): boolean {
     const current = this.getAll();
     const item = current.find((p) => p.id === id);
