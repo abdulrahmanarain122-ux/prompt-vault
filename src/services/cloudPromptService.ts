@@ -318,4 +318,44 @@ export const CloudPromptService = {
       };
     }
   },
+
+  /**
+   * Non-destructive sync of LocalStorage prompts to Supabase Cloud Vault
+   */
+  async syncLocalStorageToCloud(
+    localPrompts: PromptItem[],
+    userId: string
+  ): Promise<{ syncedCount: number; error: string | null }> {
+    try {
+      const { data: userPrompts } = await this.fetchUserPrompts(userId);
+      const existingTitles = new Set((userPrompts || []).map((p) => p.title.toLowerCase().trim()));
+
+      let synced = 0;
+      for (const p of localPrompts) {
+        if (!existingTitles.has(p.title.toLowerCase().trim())) {
+          const { error } = await this.createCloudPrompt(
+            {
+              title: p.title,
+              category: p.category,
+              body: p.body,
+              engine: p.engine,
+              aspectRatio: p.aspectRatio,
+              tags: p.tags,
+              negativePrompt: p.negativePrompt,
+              visibility: p.visibility || 'private',
+            },
+            userId
+          );
+          if (!error) synced++;
+        }
+      }
+
+      return { syncedCount: synced, error: null };
+    } catch (err) {
+      return {
+        syncedCount: 0,
+        error: err instanceof Error ? err.message : 'Failed to sync local storage to cloud.',
+      };
+    }
+  },
 };

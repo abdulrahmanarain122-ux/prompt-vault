@@ -7,12 +7,14 @@ interface AppHeaderProps {
   totalPrompts: number;
   onNewPrompt: () => void;
   onToggleMobileSidebar: () => void;
+  onSyncCloud?: () => void;
 }
 
 export const AppHeader: React.FC<AppHeaderProps> = ({
   storageStatus,
   onNewPrompt,
   onToggleMobileSidebar,
+  onSyncCloud,
 }) => {
   const { user, profile, openAuthModal, signOut } = useAuth();
   const [dropdownOpen, setDropdownOpen] = useState(false);
@@ -114,6 +116,21 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                     Signed in to Cloud Vault
                   </span>
                 </div>
+                {onSyncCloud && (
+                  <button
+                    type="button"
+                    className="user-menu-item"
+                    onClick={() => {
+                      setDropdownOpen(false);
+                      onSyncCloud();
+                    }}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: '16px', color: 'var(--primary-container)' }}>
+                      cloud_upload
+                    </span>
+                    <span>Backup Vault to Cloud</span>
+                  </button>
+                )}
                 <button
                   type="button"
                   className="user-menu-item danger"

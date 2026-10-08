@@ -88,6 +88,25 @@ const AppContent: React.FC = () => {
         setPublicPrompts(data);
       }
     });
+
+    // Handle Shareable Deep Links (?prompt=uuid)
+    const urlParams = new URLSearchParams(window.location.search);
+    const sharedPromptId = urlParams.get('prompt');
+    if (sharedPromptId) {
+      CloudPromptService.fetchPromptById(sharedPromptId).then(({ data, error }) => {
+        if (!error && data) {
+          setPublicPrompts((prev) => {
+            if (prev.some((p) => p.id === data.id)) return prev;
+            return [data, ...prev];
+          });
+          setSelectedPromptId(data.id);
+          setActiveViewMode('explore');
+          addToast(`Loaded shared prompt: "${data.title}"`, 'success');
+        } else if (error) {
+          addToast('Could not load shared prompt from link.', 'error');
+        }
+      });
+    }
   }, [refreshStorage, addToast]);
 
   // Global keyboard shortcuts (Alt+N or Ctrl+N to open new prompt)
@@ -369,6 +388,20 @@ const AppContent: React.FC = () => {
     }
   };
 
+  const handleSyncCloud = async () => {
+    if (!user) {
+      openAuthModal('login');
+      return;
+    }
+    addToast('Syncing local vault to cloud...', 'success');
+    const { syncedCount, error } = await CloudPromptService.syncLocalStorageToCloud(prompts, user.id);
+    if (error) {
+      addToast(error, 'error');
+    } else {
+      addToast(`Cloud Backup Complete: ${syncedCount} new prompts synced!`, 'success');
+    }
+  };
+
   return (
     <div className="app-layout">
       {/* Fixed Top Header */}
@@ -377,6 +410,7 @@ const AppContent: React.FC = () => {
         totalPrompts={prompts.length}
         onNewPrompt={handleOpenNewPrompt}
         onToggleMobileSidebar={() => setIsMobileSidebarOpen((prev) => !prev)}
+        onSyncCloud={handleSyncCloud}
       />
 
       {/* Fixed Left Navigation Sidebar */}
