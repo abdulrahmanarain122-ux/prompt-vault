@@ -5,7 +5,8 @@ import { AppHeader } from './components/AppHeader';
 import { Sidebar } from './components/Sidebar';
 import { WorkspaceToolbar, type ViewMode } from './components/WorkspaceToolbar';
 import { PromptCard } from './components/PromptCard';
-import { PromptModal } from './components/PromptModal';
+import { PromptInspector } from './components/PromptInspector';
+import { PromptEditorDrawer } from './components/PromptEditorDrawer';
 import { ConfirmModal } from './components/ConfirmModal';
 import { StatusBar } from './components/StatusBar';
 import { Toast } from './components/Toast';
@@ -28,7 +29,7 @@ export const App: React.FC = () => {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null);
 
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [editingPrompt, setEditingPrompt] = useState<PromptItem | null>(null);
   const [deletingPrompt, setDeletingPrompt] = useState<PromptItem | null>(null);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
@@ -36,7 +37,7 @@ export const App: React.FC = () => {
     '✓ Ready • Tap copy icon on any tile to capture prompt'
   );
 
-  // Push toast message & update status bar message
+  // Push toast message & update bottom status bar
   const addToast = useCallback((text: string, type: 'success' | 'error' = 'success') => {
     const newToast: ToastMessage = {
       id: 'toast_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
@@ -78,10 +79,13 @@ export const App: React.FC = () => {
   // Global keyboard shortcuts (Alt+N or Ctrl+N to open new prompt)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.altKey && e.key.toLowerCase() === 'n') || (e.ctrlKey && e.key.toLowerCase() === 'n' && !e.shiftKey)) {
+      if (
+        (e.altKey && e.key.toLowerCase() === 'n') ||
+        (e.ctrlKey && e.key.toLowerCase() === 'n' && !e.shiftKey)
+      ) {
         e.preventDefault();
         setEditingPrompt(null);
-        setIsModalOpen(true);
+        setIsDrawerOpen(true);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -94,12 +98,14 @@ export const App: React.FC = () => {
     let video = 0;
     let animation = 0;
     let other = 0;
+    let favorites = 0;
 
     for (const p of prompts) {
+      if (p.isFavorite) favorites++;
       const lower = p.category.toLowerCase();
       if (lower.includes('image')) image++;
       else if (lower.includes('video')) video++;
-      else if (lower.includes('animation')) animation++;
+      else if (lower.includes('animation') || lower.includes('motion')) animation++;
       else other++;
     }
 
@@ -108,6 +114,7 @@ export const App: React.FC = () => {
       video,
       animation,
       other,
+      favorites,
       total: prompts.length,
     };
   }, [prompts]);
@@ -121,36 +128,55 @@ export const App: React.FC = () => {
   const filteredPrompts = useMemo(() => {
     let result = [...prompts];
 
+    // Quick Access Filter (favorites or recent)
+    if (selectedFilter === 'favorites') {
+      result = result.filter((p) => Boolean(p.isFavorite));
+    } else if (selectedFilter === 'recent') {
+      result = result.filter((p) => (p.copyCount ?? 0) > 0);
+      result.sort((a, b) => (b.copyCount ?? 0) - (a.copyCount ?? 0));
+    } else if (selectedFilter) {
+      // Model engine filter from sidebar
+      const tag = selectedFilter.toLowerCase();
+      result = result.filter(
+        (p) =>
+          p.body.toLowerCase().includes(tag) ||
+          p.title.toLowerCase().includes(tag) ||
+          (p.engine && p.engine.toLowerCase().includes(tag))
+      );
+    }
+
     // Category filter
-    if (selectedCategory !== 'All') {
+    if (selectedCategory !== 'All' && !selectedFilter) {
       const targetCat = selectedCategory.trim().toLowerCase();
       result = result.filter((p) => {
         const itemCat = p.category.trim().toLowerCase();
         if (targetCat.includes('image')) return itemCat.includes('image');
         if (targetCat.includes('video')) return itemCat.includes('video');
-        if (targetCat.includes('animation')) return itemCat.includes('animation');
+        if (targetCat.includes('animation')) return itemCat.includes('animation') || itemCat.includes('motion');
         return itemCat === targetCat;
       });
     }
 
-    // Engine Tag filter
+    // Engine Tag filter from toolbar
     if (selectedEngineTag) {
       const tag = selectedEngineTag.toLowerCase();
       result = result.filter(
         (p) =>
           p.body.toLowerCase().includes(tag) ||
           p.title.toLowerCase().includes(tag) ||
-          p.category.toLowerCase().includes(tag)
+          p.category.toLowerCase().includes(tag) ||
+          (p.engine && p.engine.toLowerCase().includes(tag))
       );
     }
 
-    // Aspect Ratio filter
+    // Aspect Ratio filter from toolbar
     if (selectedAspectRatio) {
       const ar = selectedAspectRatio.toLowerCase();
       result = result.filter(
         (p) =>
           p.body.toLowerCase().includes(ar) ||
-          p.body.toLowerCase().includes(`--ar ${ar}`)
+          p.body.toLowerCase().includes(`--ar ${ar}`) ||
+          (p.aspectRatio && p.aspectRatio.toLowerCase().includes(ar))
       );
     }
 
@@ -161,7 +187,9 @@ export const App: React.FC = () => {
         (p) =>
           p.title.toLowerCase().includes(q) ||
           p.body.toLowerCase().includes(q) ||
-          p.category.toLowerCase().includes(q)
+          p.category.toLowerCase().includes(q) ||
+          (p.engine && p.engine.toLowerCase().includes(q)) ||
+          (p.tags && p.tags.some((t) => t.toLowerCase().includes(q)))
       );
     }
 
@@ -170,20 +198,31 @@ export const App: React.FC = () => {
       result.sort((a, b) => b.updatedAt - a.updatedAt);
     } else if (sortBy === 'title') {
       result.sort((a, b) => a.title.localeCompare(b.title));
+    } else if (sortBy === 'frequent') {
+      result.sort((a, b) => (b.copyCount ?? 0) - (a.copyCount ?? 0));
     }
 
     return result;
-  }, [prompts, selectedCategory, selectedEngineTag, selectedAspectRatio, searchQuery, sortBy]);
+  }, [prompts, selectedCategory, selectedFilter, selectedEngineTag, selectedAspectRatio, searchQuery, sortBy]);
+
+  // Selected prompt for inspector
+  const activePrompt = useMemo(() => {
+    if (selectedPromptId) {
+      const found = prompts.find((p) => p.id === selectedPromptId);
+      if (found) return found;
+    }
+    return filteredPrompts.length > 0 ? filteredPrompts[0] : null;
+  }, [prompts, selectedPromptId, filteredPrompts]);
 
   // Handlers
   const handleOpenNewPrompt = () => {
     setEditingPrompt(null);
-    setIsModalOpen(true);
+    setIsDrawerOpen(true);
   };
 
   const handleEditPrompt = (prompt: PromptItem) => {
     setEditingPrompt(prompt);
-    setIsModalOpen(true);
+    setIsDrawerOpen(true);
   };
 
   const handleDeletePromptRequest = (prompt: PromptItem) => {
@@ -199,6 +238,9 @@ export const App: React.FC = () => {
       addToast(`Deleted prompt "${deletingPrompt.title}".`, 'success');
       if (selectedPromptId === deletingPrompt.id) {
         setSelectedPromptId(null);
+      }
+      if (isDrawerOpen && editingPrompt?.id === deletingPrompt.id) {
+        setIsDrawerOpen(false);
       }
     } catch (err) {
       addToast(err instanceof Error ? err.message : 'Failed to delete prompt', 'error');
@@ -224,6 +266,21 @@ export const App: React.FC = () => {
     } catch (err) {
       addToast(err instanceof Error ? err.message : 'Could not save prompt', 'error');
     }
+  };
+
+  const handleToggleFavorite = (id: string) => {
+    const isFav = StorageService.toggleFavorite(id);
+    setPrompts((prev) =>
+      prev.map((p) => (p.id === id ? { ...p, isFavorite: isFav } : p))
+    );
+    addToast(isFav ? 'Pinned prompt to favorites!' : 'Removed from favorites.');
+  };
+
+  const handleCopySuccess = (prompt: PromptItem) => {
+    const newCount = StorageService.incrementCopyCount(prompt.id);
+    setPrompts((prev) =>
+      prev.map((p) => (p.id === prompt.id ? { ...p, copyCount: newCount } : p))
+    );
   };
 
   const handleRestoreStarters = () => {
@@ -254,7 +311,7 @@ export const App: React.FC = () => {
 
   return (
     <div className="app-layout">
-      {/* Fixed Header */}
+      {/* Fixed Top Header */}
       <AppHeader
         storageStatus={storageStatus}
         totalPrompts={prompts.length}
@@ -275,14 +332,14 @@ export const App: React.FC = () => {
         videoCount={categoryCounts.video}
         animationCount={categoryCounts.animation}
         otherCount={categoryCounts.other}
-        favoritesCount={0}
+        favoritesCount={categoryCounts.favorites}
         storageStatus={storageStatus}
         onResetStarters={handleRestoreStarters}
         isMobileOpen={isMobileSidebarOpen}
         onCloseMobile={() => setIsMobileSidebarOpen(false)}
       />
 
-      {/* Workspace Area with 256px Left Padding on Desktop */}
+      {/* Workspace Area */}
       <div className="workspace-pl">
         <main className="main-content">
           {/* Workspace Context & Filter Ribbon */}
@@ -305,27 +362,32 @@ export const App: React.FC = () => {
             onBatchAction={handleRestoreStarters}
           />
 
-          {/* Primary Workspace Content Body */}
+          {/* Primary Workspace Content Body: Gallery + Inspector */}
           <div className="workspace-content-body">
-            {/* Main Cards Gallery */}
-            <div className={`cards-canvas view-${viewMode}`}>
+            {/* Dynamic Prompt Cards Gallery */}
+            <div className={`cards-canvas view-${viewMode}`} id="cardsCanvas">
               {filteredPrompts.length > 0 ? (
                 <>
                   {filteredPrompts.map((prompt) => (
                     <PromptCard
                       key={prompt.id}
                       prompt={prompt}
+                      isSelected={selectedPromptId === prompt.id}
+                      onSelect={(p) => setSelectedPromptId(p.id)}
                       onEdit={handleEditPrompt}
                       onDelete={handleDeletePromptRequest}
+                      onToggleFavorite={handleToggleFavorite}
+                      onCopySuccess={handleCopySuccess}
                       onNotify={addToast}
                     />
                   ))}
 
-                  {/* Quick Add Placeholder Trigger Tile */}
+                  {/* Quick Add Placeholder Trigger Card */}
                   <button
                     type="button"
                     className="prompt-card-placeholder"
                     onClick={handleOpenNewPrompt}
+                    title="Click or press ⌘N to create a new prompt"
                   >
                     <div className="placeholder-plus-circle">
                       <span className="material-symbols-outlined" style={{ fontSize: '24px' }}>
@@ -425,6 +487,14 @@ export const App: React.FC = () => {
                 </div>
               )}
             </div>
+
+            {/* Right Inspector Rail */}
+            {viewMode !== 'dense' && (
+              <PromptInspector
+                selectedPrompt={activePrompt}
+                onNotify={addToast}
+              />
+            )}
           </div>
         </main>
 
@@ -436,16 +506,17 @@ export const App: React.FC = () => {
         />
       </div>
 
-      {/* Modal Dialog for Add/Edit (Preserved while Phase 4 Slide-over Drawer is prepared) */}
-      <PromptModal
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
+      {/* Slide-Over Drawer for Add/Edit Prompt */}
+      <PromptEditorDrawer
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
         onSubmit={handleSavePrompt}
+        onDeleteRequest={handleDeletePromptRequest}
         initialPrompt={editingPrompt}
         availableCategories={availableCategoryNames}
       />
 
-      {/* Confirmation Dialog */}
+      {/* Destructive Deletion Confirmation Modal */}
       <ConfirmModal
         isOpen={Boolean(deletingPrompt)}
         prompt={deletingPrompt}

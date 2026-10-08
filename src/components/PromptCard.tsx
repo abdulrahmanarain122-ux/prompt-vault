@@ -3,8 +3,12 @@ import type { PromptItem } from '../types/prompt';
 
 interface PromptCardProps {
   prompt: PromptItem;
+  isSelected?: boolean;
+  onSelect?: (prompt: PromptItem) => void;
   onEdit: (prompt: PromptItem) => void;
   onDelete: (prompt: PromptItem) => void;
+  onToggleFavorite?: (id: string) => void;
+  onCopySuccess?: (prompt: PromptItem) => void;
   onNotify: (message: string, type?: 'success' | 'error') => void;
 }
 
@@ -23,30 +27,50 @@ function formatRelativeTime(timestamp: number): string {
   });
 }
 
-function getCategoryClass(category: string): string {
+function getCategoryTheme(category: string): {
+  type: 'video' | 'image' | 'animation' | 'other';
+  label: string;
+  defaultEngine: string;
+} {
   const lower = category.toLowerCase();
-  if (lower.includes('video')) return 'video';
-  if (lower.includes('vfx') || lower.includes('effects')) return 'vfx';
-  if (lower.includes('image') || lower.includes('concept')) return 'image';
-  if (lower.includes('sound') || lower.includes('foley')) return 'sound';
-  if (lower.includes('light') || lower.includes('color')) return 'lighting';
-  return '';
+  if (lower.includes('video')) {
+    return { type: 'video', label: 'VIDEO', defaultEngine: 'Runway Gen-3' };
+  }
+  if (lower.includes('animation') || lower.includes('motion')) {
+    return { type: 'animation', label: 'ANIMATION', defaultEngine: 'Luma Motion' };
+  }
+  if (lower.includes('image') || lower.includes('concept')) {
+    return { type: 'image', label: 'IMAGE', defaultEngine: 'Flux.1 Dev' };
+  }
+  return { type: 'other', label: 'OTHER', defaultEngine: 'Directive' };
+}
+
+function formatShortId(id: string): string {
+  // If id is starter-1 -> PV-0001, or extract numbers/letters
+  const clean = id.replace(/[^a-zA-Z0-9]/g, '').slice(-4).toUpperCase();
+  return `PV-${clean.padStart(4, '0')}`;
 }
 
 export const PromptCard: React.FC<PromptCardProps> = ({
   prompt,
+  isSelected = false,
+  onSelect,
   onEdit,
   onDelete,
+  onToggleFavorite,
+  onCopySuccess,
   onNotify,
 }) => {
   const [copied, setCopied] = useState(false);
+  const theme = getCategoryTheme(prompt.category);
+  const shortId = formatShortId(prompt.id);
 
-  const handleCopy = async () => {
+  const handleCopy = async (e: React.MouseEvent) => {
+    e.stopPropagation();
     try {
       if (navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(prompt.body);
       } else {
-        // Fallback for older browsers or restricted clipboard contexts
         const textarea = document.createElement('textarea');
         textarea.value = prompt.body;
         textarea.style.position = 'fixed';
@@ -58,90 +82,168 @@ export const PromptCard: React.FC<PromptCardProps> = ({
         document.body.removeChild(textarea);
       }
       setCopied(true);
+      onCopySuccess?.(prompt);
       onNotify(`Copied "${prompt.title}" to clipboard!`, 'success');
-      setTimeout(() => setCopied(false), 2000);
+      setTimeout(() => setCopied(false), 2400);
     } catch (err) {
       console.error('Clipboard copy failed:', err);
       onNotify('Could not copy to clipboard. Please select and copy manually.', 'error');
     }
   };
 
-  const categoryModifier = getCategoryClass(prompt.category);
+  const handleFavoriteClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onToggleFavorite?.(prompt.id);
+  };
+
+  // Extract parameter tags or words
+  const wordCount = prompt.body.trim() ? prompt.body.trim().split(/\s+/).length : 0;
+  const estimatedTokens = Math.round(wordCount * 1.3);
+
+  // Aspect ratio extraction if embedded in body (e.g. --ar 16:9) or stored
+  const arMatch = prompt.body.match(/--ar\s+([0-9]+:[0-9.]+)/i);
+  const displayAr = prompt.aspectRatio || (arMatch ? arMatch[1] : theme.type === 'video' ? '2.39:1' : '16:9');
+  const displayEngine = prompt.engine || theme.defaultEngine;
 
   return (
-    <article className="prompt-card" aria-labelledby={`prompt-title-${prompt.id}`}>
-      <div className="card-header">
-        <div className="card-top-row">
-          <span className={`category-badge ${categoryModifier}`}>
-            {prompt.category}
-          </span>
-          <time className="card-date" dateTime={new Date(prompt.updatedAt).toISOString()}>
-            {formatRelativeTime(prompt.updatedAt)}
-          </time>
+    <article
+      className={`prompt-card ${isSelected ? 'selected' : ''}`}
+      onClick={() => onSelect?.(prompt)}
+      aria-label={`Prompt: ${prompt.title}`}
+    >
+      {/* Cyan indicator bar on active selection */}
+      {isSelected && <div className="card-selection-indicator" aria-hidden="true" />}
+
+      {/* Media Visual Header */}
+      <div className="card-media-header">
+        <div className={`card-media-art media-art-${theme.type}`}>
+          <div className="art-overlay-gradient" />
+          <div className="art-overlay-mesh" />
+
+          {/* Top Metadata Row */}
+          <div className="card-header-top-row">
+            <div className="badge-cluster-left">
+              <span className={`badge-category ${theme.type}`}>
+                {theme.label}
+              </span>
+              <span className="badge-model-tag">
+                {displayEngine}
+              </span>
+            </div>
+
+            <div className="badge-cluster-right">
+              <span className="badge-ar">{displayAr}</span>
+              <button
+                type="button"
+                className={`btn-star-card ${prompt.isFavorite ? 'active' : ''}`}
+                onClick={handleFavoriteClick}
+                title={prompt.isFavorite ? 'Remove from favorites' : 'Mark as favorite'}
+                aria-label="Toggle favorite"
+              >
+                <span
+                  className="material-symbols-outlined"
+                  style={{
+                    fontSize: '16px',
+                    fontVariationSettings: prompt.isFavorite ? "'FILL' 1" : "'FILL' 0",
+                  }}
+                >
+                  star
+                </span>
+              </button>
+            </div>
+          </div>
+
+          {/* Bottom Left ID Badge */}
+          <span className="card-header-id-badge">{shortId}</span>
         </div>
-        <h3 id={`prompt-title-${prompt.id}`} className="card-title">
-          {prompt.title}
-        </h3>
       </div>
 
-      <div className="card-body">
-        <div className="prompt-snippet-box" title="Full prompt text">
-          {prompt.body}
+      {/* Card Content Body */}
+      <div className="card-content-wrap">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+          <h3 className="card-title-text">{prompt.title}</h3>
+
+          {/* Monospace Code Snippet Box */}
+          <div
+            className="card-snippet-box font-code-sm"
+            title="Click to select prompt text"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {prompt.body}
+          </div>
+
+          {/* Parameter Strip */}
+          <div className="card-parameter-strip">
+            <span className="card-param-pill accent">~{estimatedTokens} tokens</span>
+            <span className="card-param-pill">{wordCount} words</span>
+            {prompt.tags && prompt.tags.length > 0 ? (
+              prompt.tags.slice(0, 3).map((tag) => (
+                <span key={tag} className="card-param-pill">
+                  #{tag}
+                </span>
+              ))
+            ) : (
+              <span className="card-param-pill">{prompt.category}</span>
+            )}
+          </div>
         </div>
-      </div>
 
-      <div className="card-footer">
-        <button
-          type="button"
-          className={`copy-btn ${copied ? 'copied' : ''}`}
-          onClick={handleCopy}
-          aria-label={copied ? 'Prompt copied' : `Copy prompt: ${prompt.title}`}
-        >
-          {copied ? (
-            <>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <polyline points="20 6 9 17 4 12" />
-              </svg>
-              <span>Copied!</span>
-            </>
-          ) : (
-            <>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-              </svg>
-              <span>Copy</span>
-            </>
-          )}
-        </button>
+        {/* Operational Footer Strip */}
+        <div className="card-footer-strip">
+          <div className="footer-actions-left">
+            <button
+              type="button"
+              className={`btn-card-copy ${copied ? 'copied' : ''}`}
+              onClick={handleCopy}
+              aria-label={copied ? 'Copied to clipboard' : 'Copy prompt text'}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: '15px' }}>
+                {copied ? 'done' : 'content_copy'}
+              </span>
+              <span>{copied ? 'Copied!' : 'Copy'}</span>
+            </button>
 
-        <div className="card-controls">
-          <button
-            type="button"
-            className="icon-btn"
-            onClick={() => onEdit(prompt)}
-            title="Edit prompt"
-            aria-label={`Edit prompt: ${prompt.title}`}
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
-              <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
-            </svg>
-          </button>
-          <button
-            type="button"
-            className="icon-btn danger"
-            onClick={() => onDelete(prompt)}
-            title="Delete prompt"
-            aria-label={`Delete prompt: ${prompt.title}`}
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="3 6 5 6 21 6" />
-              <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-              <line x1="10" y1="11" x2="10" y2="17" />
-              <line x1="14" y1="11" x2="14" y2="17" />
-            </svg>
-          </button>
+            <button
+              type="button"
+              className="btn-card-icon"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEdit(prompt);
+              }}
+              title="Edit prompt"
+              aria-label="Edit prompt"
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
+                edit
+              </span>
+            </button>
+
+            <button
+              type="button"
+              className="btn-card-icon danger"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(prompt);
+              }}
+              title="Delete prompt"
+              aria-label="Delete prompt"
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: '18px' }}>
+                delete
+              </span>
+            </button>
+          </div>
+
+          <div className="footer-meta-right">
+            {(prompt.copyCount ?? 0) > 0 && (
+              <span className="card-relative-time" title="Total times copied">
+                Copied {prompt.copyCount}×
+              </span>
+            )}
+            <span className="card-relative-time">
+              {formatRelativeTime(prompt.updatedAt)}
+            </span>
+          </div>
         </div>
       </div>
     </article>

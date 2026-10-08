@@ -140,6 +140,12 @@ export const StorageService = {
       title: trimmedTitle,
       category: trimmedCategory,
       body: trimmedBody,
+      engine: input.engine,
+      aspectRatio: input.aspectRatio,
+      tags: input.tags,
+      negativePrompt: input.negativePrompt,
+      isFavorite: false,
+      copyCount: 0,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
@@ -177,6 +183,10 @@ export const StorageService = {
       title: trimmedTitle,
       category: trimmedCategory,
       body: trimmedBody,
+      engine: input.engine ?? existing.engine,
+      aspectRatio: input.aspectRatio ?? existing.aspectRatio,
+      tags: input.tags ?? existing.tags,
+      negativePrompt: input.negativePrompt ?? existing.negativePrompt,
       updatedAt: Date.now(),
     };
 
@@ -184,6 +194,24 @@ export const StorageService = {
     updatedList[index] = updatedItem;
     this.saveAll(updatedList);
     return updatedItem;
+  },
+
+  toggleFavorite(id: string): boolean {
+    const current = this.getAll();
+    const item = current.find((p) => p.id === id);
+    if (!item) return false;
+    item.isFavorite = !item.isFavorite;
+    this.saveAll(current);
+    return item.isFavorite;
+  },
+
+  incrementCopyCount(id: string): number {
+    const current = this.getAll();
+    const item = current.find((p) => p.id === id);
+    if (!item) return 0;
+    item.copyCount = (item.copyCount || 0) + 1;
+    this.saveAll(current);
+    return item.copyCount;
   },
 
   delete(id: string): boolean {

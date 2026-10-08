@@ -1,0 +1,180 @@
+import React from 'react';
+import type { PromptItem } from '../types/prompt';
+
+interface PromptInspectorProps {
+  selectedPrompt: PromptItem | null;
+  onAppendToken?: (token: string) => void;
+  onNotify: (message: string, type?: 'success' | 'error') => void;
+}
+
+export const PromptInspector: React.FC<PromptInspectorProps> = ({
+  selectedPrompt,
+  onAppendToken,
+  onNotify,
+}) => {
+  const quickTokens = [
+    '+ --ar 16:9',
+    '+ --style raw',
+    '+ --v 6.1',
+    '+ anamorphic flare',
+    '+ volumetric dust',
+    '+ Kodak 250D',
+  ];
+
+  const handleTokenClick = async (token: string) => {
+    const rawToken = token.replace(/^\+\s*/, '');
+    try {
+      if (onAppendToken) {
+        onAppendToken(rawToken);
+      } else {
+        await navigator.clipboard.writeText(rawToken);
+        onNotify(`Copied "${rawToken}" to clipboard!`, 'success');
+      }
+    } catch {
+      onNotify(`Token: ${rawToken}`);
+    }
+  };
+
+  const wordCount = selectedPrompt?.body.trim()
+    ? selectedPrompt.body.trim().split(/\s+/).length
+    : 0;
+  const estimatedTokens = Math.round(wordCount * 1.3);
+  const clipWindowMax = 77;
+  const tokenPercent = Math.min(100, Math.round((estimatedTokens / clipWindowMax) * 100));
+
+  const shortId = selectedPrompt
+    ? `PV-${selectedPrompt.id.replace(/[^a-zA-Z0-9]/g, '').slice(-4).toUpperCase().padStart(4, '0')}`
+    : 'PV-NONE';
+
+  const engine = selectedPrompt?.engine || (selectedPrompt?.category.toLowerCase().includes('video') ? 'Runway Gen-3' : 'Flux.1 Dev');
+  const ar = selectedPrompt?.aspectRatio || '16:9';
+
+  return (
+    <aside className="inspector-rail" aria-label="Selected prompt inspector rail">
+      {/* Fast Stats Bento */}
+      <div className="inspector-bento-card">
+        <div className="inspector-bento-header">
+          <span className="font-label-sm uppercase tracking-wider" style={{ color: 'var(--outline)' }}>
+            Active Selection Inspector
+          </span>
+          <span className="font-code-sm" style={{ color: 'var(--primary)' }}>
+            {shortId}
+          </span>
+        </div>
+
+        {/* Model Target Box */}
+        <div className="inspector-target-box">
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <span className="font-label-sm" style={{ color: 'var(--outline)' }}>
+              Model Target
+            </span>
+            <span className="font-body-sm" style={{ color: 'var(--on-surface)', fontWeight: 500 }}>
+              {engine}
+            </span>
+          </div>
+          <span className="material-symbols-outlined" style={{ color: 'var(--secondary)', fontSize: '20px' }}>
+            movie
+          </span>
+        </div>
+
+        {/* Token Estimation Visual Bar */}
+        <div className="inspector-progress-wrap">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }} className="font-code-sm">
+            <span style={{ color: 'var(--outline)' }}>Estimated Tokens</span>
+            <span style={{ color: 'var(--on-surface)' }}>
+              {estimatedTokens} / {clipWindowMax} clip window
+            </span>
+          </div>
+          <div className="inspector-progress-track">
+            <div
+              className="inspector-progress-bar"
+              style={{ width: `${tokenPercent}%` }}
+            />
+          </div>
+        </div>
+
+        {/* Parameter Breakdown */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', paddingTop: '4px' }}>
+          <div className="inspector-param-row">
+            <span style={{ color: 'var(--outline)' }}>Aspect Ratio</span>
+            <span style={{ color: 'var(--on-surface)' }}>{ar}</span>
+          </div>
+          <div className="inspector-param-row">
+            <span style={{ color: 'var(--outline)' }}>Word Count</span>
+            <span style={{ color: 'var(--on-surface)' }}>{wordCount} words</span>
+          </div>
+          <div className="inspector-param-row">
+            <span style={{ color: 'var(--outline)' }}>Archetype</span>
+            <span style={{ color: 'var(--on-surface)' }}>
+              {selectedPrompt ? selectedPrompt.category : 'None'}
+            </span>
+          </div>
+          <div className="inspector-param-row">
+            <span style={{ color: 'var(--outline)' }}>Saved State</span>
+            <span style={{ color: 'var(--primary)' }}>Local Vault Active</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Quick Reference Prompt Expander Utility */}
+      <div className="inspector-bento-card">
+        <div className="inspector-bento-header">
+          <span className="font-label-sm uppercase tracking-wider" style={{ color: 'var(--outline)' }}>
+            Quick Token Insert
+          </span>
+          <span className="font-code-sm" style={{ color: 'var(--secondary)' }}>
+            Click to Copy
+          </span>
+        </div>
+        <div className="token-inserts-cluster">
+          {quickTokens.map((t) => (
+            <button
+              key={t}
+              type="button"
+              className="btn-token-insert"
+              onClick={() => handleTokenClick(t)}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Live Engine Availability Indicator */}
+      <div className="inspector-bento-card">
+        <span className="font-label-sm uppercase tracking-wider" style={{ color: 'var(--outline)' }}>
+          Engine API Status
+        </span>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', paddingTop: '4px' }}>
+          <div className="api-status-row">
+            <span style={{ color: 'var(--on-surface-variant)' }}>Runway Gen-3 Gen API</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span className="pulse-dot" style={{ width: '6px', height: '6px' }} />
+              <span className="font-code-sm" style={{ color: 'var(--primary)' }}>
+                Normal
+              </span>
+            </div>
+          </div>
+          <div className="api-status-row">
+            <span style={{ color: 'var(--on-surface-variant)' }}>Black Forest Flux.1</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span className="pulse-dot" style={{ width: '6px', height: '6px' }} />
+              <span className="font-code-sm" style={{ color: 'var(--primary)' }}>
+                Operational
+              </span>
+            </div>
+          </div>
+          <div className="api-status-row">
+            <span style={{ color: 'var(--on-surface-variant)' }}>Prompt Vault Local Engine</span>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span className="pulse-dot" style={{ width: '6px', height: '6px' }} />
+              <span className="font-code-sm" style={{ color: 'var(--primary)' }}>
+                Ready
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  );
+};

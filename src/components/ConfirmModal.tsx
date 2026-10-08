@@ -28,7 +28,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
 
   return (
     <div
-      className="modal-backdrop"
+      className="confirm-modal-backdrop"
       onClick={(e) => {
         if (e.target === e.currentTarget) onCancel();
       }}
@@ -37,55 +37,53 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
       aria-labelledby="confirm-delete-heading"
       aria-describedby="confirm-delete-desc"
     >
-      <div className="modal-box" style={{ maxWidth: '440px' }}>
-        <div className="modal-header">
-          <h2 id="confirm-delete-heading" className="modal-title" style={{ color: 'var(--danger)' }}>
-            Delete Prompt?
-          </h2>
+      <div className="confirm-modal-card">
+        <div className="confirm-modal-header">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span className="material-symbols-outlined" style={{ color: 'var(--error)', fontSize: '20px' }}>
+              warning
+            </span>
+            <h2 id="confirm-delete-heading" className="font-headline-sm" style={{ color: 'var(--error)' }}>
+              Delete Prompt Archetype?
+            </h2>
+          </div>
           <button
             type="button"
-            className="modal-close-btn"
+            className="drawer-close-btn"
             onClick={onCancel}
             aria-label="Cancel deletion"
           >
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
+            <span className="material-symbols-outlined" style={{ fontSize: '20px' }}>
+              close
+            </span>
           </button>
         </div>
 
-        <div style={{ padding: '1.5rem' }}>
-          <p id="confirm-delete-desc" style={{ fontSize: '0.9rem', color: 'var(--text-secondary)', lineHeight: 1.6 }}>
-            Are you sure you want to permanently delete{' '}
-            <strong style={{ color: 'var(--text-primary)' }}>&ldquo;{prompt.title}&rdquo;</strong>?
+        <div className="confirm-modal-body">
+          <p id="confirm-delete-desc" className="font-body-md" style={{ color: 'var(--on-surface-variant)' }}>
+            Are you sure you want to delete{' '}
+            <strong style={{ color: 'var(--on-surface)' }}>&ldquo;{prompt.title}&rdquo;</strong>?
           </p>
-          <div
-            style={{
-              marginTop: '1rem',
-              padding: '0.75rem 1rem',
-              backgroundColor: 'var(--danger-surface)',
-              border: '1px solid var(--danger-border)',
-              borderRadius: 'var(--radius-sm)',
-              fontSize: '0.8rem',
-              color: '#fca5a5',
-            }}
-          >
-            This action immediately removes the record from your browser storage and cannot be undone.
+          <div className="confirm-warning-callout">
+            This action immediately deletes the record from your browser local storage. This action cannot be undone.
           </div>
         </div>
 
-        <div className="modal-footer">
-          <button type="button" className="btn-secondary" onClick={onCancel}>
+        <div className="confirm-modal-footer">
+          <button
+            type="button"
+            className="btn-drawer-discard"
+            onClick={onCancel}
+          >
             Cancel
           </button>
           <button
             type="button"
-            className="btn-danger"
+            className="btn-confirm-delete"
             id="confirm-delete-btn"
             onClick={onConfirm}
           >
-            Delete Permanently
+            Permanently Delete
           </button>
         </div>
       </div>

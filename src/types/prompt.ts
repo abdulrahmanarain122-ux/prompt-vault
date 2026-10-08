@@ -12,12 +12,22 @@ export interface PromptItem {
   body: string;
   createdAt: number;
   updatedAt: number;
+  isFavorite?: boolean;
+  copyCount?: number;
+  engine?: string;
+  aspectRatio?: string;
+  tags?: string[];
+  negativePrompt?: string;
 }
 
 export type PromptFormInput = {
   title: string;
   category: string;
   body: string;
+  engine?: string;
+  aspectRatio?: string;
+  tags?: string[];
+  negativePrompt?: string;
 };
 
 export interface StorageStatus {
