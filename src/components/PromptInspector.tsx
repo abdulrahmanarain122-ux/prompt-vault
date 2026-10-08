@@ -110,9 +110,35 @@ export const PromptInspector: React.FC<PromptInspectorProps> = ({
             </span>
           </div>
           <div className="inspector-param-row">
-            <span style={{ color: 'var(--outline)' }}>Saved State</span>
-            <span style={{ color: 'var(--primary)' }}>Local Vault Active</span>
+            <span style={{ color: 'var(--outline)' }}>Cloud Visibility</span>
+            <span style={{ color: selectedPrompt?.visibility === 'public' ? 'var(--primary-container)' : 'var(--outline)', fontWeight: 600 }}>
+              {selectedPrompt?.visibility === 'public' ? '🌐 Public Community' : '🔒 Private Vault'}
+            </span>
           </div>
+          {selectedPrompt?.authorUsername && (
+            <div className="inspector-param-row">
+              <span style={{ color: 'var(--outline)' }}>Creator</span>
+              <span style={{ color: 'var(--primary)' }}>@{selectedPrompt.authorUsername}</span>
+            </div>
+          )}
+          {selectedPrompt?.shareUrl && selectedPrompt.visibility === 'public' && (
+            <div style={{ paddingTop: '6px' }}>
+              <button
+                type="button"
+                className="btn-card-copy"
+                style={{ width: '100%', justifyContent: 'center' }}
+                onClick={() => {
+                  navigator.clipboard.writeText(selectedPrompt.shareUrl!);
+                  onNotify('Copied public shareable link!', 'success');
+                }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: '15px' }}>
+                  share
+                </span>
+                <span>Copy Share Link</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 

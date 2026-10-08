@@ -31,6 +31,8 @@ const PRESET_ASPECT_RATIOS = [
   '4:5 (Instagram Frame)',
 ];
 
+import { useAuth } from '../context/AuthContext';
+
 export const PromptEditorDrawer: React.FC<PromptEditorDrawerProps> = ({
   isOpen,
   onClose,
@@ -38,6 +40,7 @@ export const PromptEditorDrawer: React.FC<PromptEditorDrawerProps> = ({
   onDeleteRequest,
   initialPrompt,
 }) => {
+  const { user, openAuthModal } = useAuth();
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState(PRESET_CATEGORIES[0]);
   const [engine, setEngine] = useState(PRESET_ENGINES[0]);
@@ -46,6 +49,7 @@ export const PromptEditorDrawer: React.FC<PromptEditorDrawerProps> = ({
   const [negativePrompt, setNegativePrompt] = useState('');
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
+  const [visibility, setVisibility] = useState<'public' | 'private'>('private');
   const [errors, setErrors] = useState<{ title?: string; body?: string }>({});
 
   const titleInputRef = useRef<HTMLInputElement>(null);
@@ -56,6 +60,7 @@ export const PromptEditorDrawer: React.FC<PromptEditorDrawerProps> = ({
       if (initialPrompt) {
         setTitle(initialPrompt.title);
         setBody(initialPrompt.body);
+        setVisibility(initialPrompt.visibility || 'private');
 
         // Normalize category
         const catMatch = PRESET_CATEGORIES.find((c) =>
@@ -80,6 +85,7 @@ export const PromptEditorDrawer: React.FC<PromptEditorDrawerProps> = ({
         setAspectRatio(PRESET_ASPECT_RATIOS[1]);
         setNegativePrompt('');
         setTags([]);
+        setVisibility('private');
       }
       setTagInput('');
       setErrors({});
@@ -138,6 +144,7 @@ export const PromptEditorDrawer: React.FC<PromptEditorDrawerProps> = ({
         aspectRatio: arCode,
         negativePrompt: negativePrompt.trim(),
         tags,
+        visibility,
       },
       initialPrompt ? initialPrompt.id : undefined
     );
@@ -228,6 +235,59 @@ export const PromptEditorDrawer: React.FC<PromptEditorDrawerProps> = ({
               <span className="font-code-sm" style={{ color: 'var(--error)' }} role="alert">
                 {errors.title}
               </span>
+            )}
+          </div>
+
+          {/* Cloud Sharing & Visibility Segmented Control */}
+          <div className="drawer-field-group">
+            <label className="drawer-label">
+              <span>Cloud Sharing & Visibility</span>
+              <span className="font-code-sm" style={{ color: visibility === 'public' ? 'var(--primary-container)' : 'var(--outline)' }}>
+                {visibility === 'public' ? '🌐 Public Community' : '🔒 Private Vault'}
+              </span>
+            </label>
+            <div className="visibility-segmented-toggle">
+              <button
+                type="button"
+                className={`visibility-toggle-btn ${visibility === 'private' ? 'active' : ''}`}
+                onClick={() => setVisibility('private')}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>
+                  lock
+                </span>
+                <span>Private Vault</span>
+              </button>
+              <button
+                type="button"
+                className={`visibility-toggle-btn ${visibility === 'public' ? 'active' : ''}`}
+                onClick={() => {
+                  if (!user) {
+                    openAuthModal('login');
+                    return;
+                  }
+                  setVisibility('public');
+                }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>
+                  public
+                </span>
+                <span>Public Community</span>
+              </button>
+            </div>
+            {!user && (
+              <p className="font-code-sm" style={{ color: 'var(--outline)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span className="material-symbols-outlined" style={{ fontSize: '14px', color: 'var(--primary-container)' }}>info</span>
+                <span>
+                  <button
+                    type="button"
+                    onClick={() => openAuthModal('login')}
+                    style={{ background: 'none', border: 'none', color: 'var(--primary-container)', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
+                  >
+                    Sign in
+                  </button>{' '}
+                  is required to publish prompts for the community.
+                </span>
+              </p>
             )}
           </div>
 

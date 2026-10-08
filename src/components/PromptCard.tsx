@@ -128,6 +128,22 @@ export const PromptCard: React.FC<PromptCardProps> = ({
           <span className={`badge-category ${theme.type}`}>
             {theme.label}
           </span>
+          {prompt.visibility && (
+            <span
+              className={`badge-visibility ${prompt.visibility}`}
+              title={prompt.visibility === 'public' ? 'Public Community Prompt' : 'Private Personal Prompt'}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: '11px' }}>
+                {prompt.visibility === 'public' ? 'public' : 'lock'}
+              </span>
+              <span>{prompt.visibility === 'public' ? 'Public' : 'Private'}</span>
+            </span>
+          )}
+          {prompt.authorUsername && prompt.visibility === 'public' && (
+            <span className="badge-author" title={`Created by @${prompt.authorUsername}`}>
+              @{prompt.authorUsername}
+            </span>
+          )}
           <span className="badge-model-tag">
             {displayEngine}
           </span>
