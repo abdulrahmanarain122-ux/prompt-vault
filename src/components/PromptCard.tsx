@@ -9,6 +9,7 @@ interface PromptCardProps {
   onDelete: (prompt: PromptItem) => void;
   onToggleFavorite?: (id: string) => void;
   onCopySuccess?: (prompt: PromptItem) => void;
+  onFork?: (prompt: PromptItem) => void;
   onNotify: (message: string, type?: 'success' | 'error') => void;
 }
 
@@ -56,6 +57,7 @@ export const PromptCard: React.FC<PromptCardProps> = ({
   onDelete,
   onToggleFavorite,
   onCopySuccess,
+  onFork,
   onNotify,
 }) => {
   const [copied, setCopied] = useState(false);
@@ -216,6 +218,23 @@ export const PromptCard: React.FC<PromptCardProps> = ({
               </span>
               <span>{copied ? 'Copied!' : 'Copy'}</span>
             </button>
+
+            {onFork && prompt.visibility === 'public' && (
+              <button
+                type="button"
+                className="btn-card-icon"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onFork(prompt);
+                }}
+                title="Fork prompt into your personal vault"
+                aria-label="Fork prompt"
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: '18px', color: 'var(--primary-container)' }}>
+                  alt_route
+                </span>
+              </button>
+            )}
 
             <button
               type="button"

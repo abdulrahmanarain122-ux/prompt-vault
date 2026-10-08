@@ -11,10 +11,15 @@ import { ConfirmModal } from './components/ConfirmModal';
 import { StatusBar } from './components/StatusBar';
 import { Toast } from './components/Toast';
 import type { ToastMessage } from './components/Toast';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { AuthModal } from './components/AuthModal';
+import { CloudPromptService } from './services/cloudPromptService';
+import type { ActiveViewMode } from './components/Sidebar';
 
-export const App: React.FC = () => {
+const AppContent: React.FC = () => {
+  const { user, openAuthModal } = useAuth();
+  const [activeViewMode, setActiveViewMode] = useState<ActiveViewMode>('vault');
+  const [publicPrompts, setPublicPrompts] = useState<PromptItem[]>([]);
   const [prompts, setPrompts] = useState<PromptItem[]>([]);
   const [storageStatus, setStorageStatus] = useState<StorageStatus>({
     isAvailable: true,
@@ -76,6 +81,13 @@ export const App: React.FC = () => {
       console.error('Initialization error:', err);
       addToast('Failed to load prompts from storage.', 'error');
     }
+
+    // Fetch Public Explore Community prompts
+    CloudPromptService.fetchPublicPrompts().then(({ data, error }) => {
+      if (!error && data) {
+        setPublicPrompts(data);
+      }
+    });
   }, [refreshStorage, addToast]);
 
   // Global keyboard shortcuts (Alt+N or Ctrl+N to open new prompt)
@@ -101,7 +113,9 @@ export const App: React.FC = () => {
     let other = 0;
     let favorites = 0;
 
-    for (const p of prompts) {
+    const source = activeViewMode === 'explore' ? publicPrompts : prompts;
+
+    for (const p of source) {
       if (p.isFavorite) favorites++;
       const lower = p.category.toLowerCase();
       if (lower.includes('image')) image++;
@@ -114,18 +128,19 @@ export const App: React.FC = () => {
       video,
       other,
       favorites,
-      total: prompts.length,
+      total: source.length,
     };
-  }, [prompts]);
+  }, [prompts, publicPrompts, activeViewMode]);
 
   const availableCategoryNames = useMemo(() => {
-    const set = new Set(prompts.map((p) => p.category.trim()));
+    const source = activeViewMode === 'explore' ? publicPrompts : prompts;
+    const set = new Set(source.map((p) => p.category.trim()));
     return Array.from(set);
-  }, [prompts]);
+  }, [prompts, publicPrompts, activeViewMode]);
 
   // Filtered & sorted prompts
   const filteredPrompts = useMemo(() => {
-    let result = [...prompts];
+    let result = activeViewMode === 'explore' ? [...publicPrompts] : [...prompts];
 
     // Quick Access Filter (favorites or recent)
     if (selectedFilter === 'favorites') {
@@ -201,16 +216,17 @@ export const App: React.FC = () => {
     }
 
     return result;
-  }, [prompts, selectedCategory, selectedFilter, selectedEngineTag, selectedAspectRatio, searchQuery, sortBy]);
+  }, [prompts, publicPrompts, activeViewMode, selectedCategory, selectedFilter, selectedEngineTag, selectedAspectRatio, searchQuery, sortBy]);
 
   // Selected prompt for inspector
   const activePrompt = useMemo(() => {
+    const source = activeViewMode === 'explore' ? publicPrompts : prompts;
     if (selectedPromptId) {
-      const found = prompts.find((p) => p.id === selectedPromptId);
+      const found = source.find((p) => p.id === selectedPromptId);
       if (found) return found;
     }
     return filteredPrompts.length > 0 ? filteredPrompts[0] : null;
-  }, [prompts, selectedPromptId, filteredPrompts]);
+  }, [prompts, publicPrompts, activeViewMode, selectedPromptId, filteredPrompts]);
 
   // Handlers
   const handleOpenNewPrompt = () => {
@@ -227,11 +243,16 @@ export const App: React.FC = () => {
     setDeletingPrompt(prompt);
   };
 
-  const handleConfirmDelete = () => {
+  const handleConfirmDelete = async () => {
     if (!deletingPrompt) return;
     try {
       StorageService.delete(deletingPrompt.id);
       setPrompts((prev) => prev.filter((p) => p.id !== deletingPrompt.id));
+
+      if (user && deletingPrompt.userId === user.id) {
+        await CloudPromptService.deleteCloudPrompt(deletingPrompt.id);
+      }
+
       refreshStorage();
       addToast(`Deleted prompt "${deletingPrompt.title}".`, 'success');
       if (selectedPromptId === deletingPrompt.id) {
@@ -247,22 +268,65 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleSavePrompt = (input: PromptFormInput, editId?: string) => {
+  const handleSavePrompt = async (input: PromptFormInput, editId?: string) => {
     try {
       if (editId) {
         const updated = StorageService.update(editId, input);
         setPrompts((prev) => prev.map((p) => (p.id === editId ? updated : p)));
         addToast(`Updated "${updated.title}" successfully!`, 'success');
         setSelectedPromptId(updated.id);
+
+        if (user) {
+          await CloudPromptService.updateCloudPrompt(editId, input);
+        }
       } else {
         const created = StorageService.create(input);
         setPrompts((prev) => [created, ...prev]);
-        addToast(`Saved "${created.title}" to vault!`, 'success');
         setSelectedPromptId(created.id);
+
+        if (user) {
+          const { data: cloudCreated } = await CloudPromptService.createCloudPrompt(input, user.id);
+          if (cloudCreated && input.visibility === 'public') {
+            setPublicPrompts((prev) => [cloudCreated, ...prev]);
+          }
+        }
+
+        addToast(`Saved "${created.title}" to vault!`, 'success');
       }
       refreshStorage();
     } catch (err) {
       addToast(err instanceof Error ? err.message : 'Could not save prompt', 'error');
+    }
+  };
+
+  const handleForkPrompt = async (prompt: PromptItem) => {
+    if (!user) {
+      openAuthModal('login');
+      addToast('Please sign in to fork community prompts to your vault.', 'error');
+      return;
+    }
+    try {
+      const { data, error } = await CloudPromptService.forkPrompt(prompt, user.id);
+      if (error || !data) {
+        addToast(error || 'Failed to fork prompt', 'error');
+        return;
+      }
+      // Save locally to personal vault
+      const created = StorageService.create({
+        title: data.title,
+        category: data.category,
+        body: data.body,
+        engine: data.engine,
+        aspectRatio: data.aspectRatio,
+        tags: data.tags,
+        negativePrompt: data.negativePrompt,
+      });
+      setPrompts((prev) => [created, ...prev]);
+      refreshStorage();
+      addToast(`Forked "${prompt.title}" to your personal vault!`, 'success');
+      setActiveViewMode('vault');
+    } catch (err) {
+      addToast('Could not fork prompt', 'error');
     }
   };
 
@@ -279,6 +343,9 @@ export const App: React.FC = () => {
     setPrompts((prev) =>
       prev.map((p) => (p.id === prompt.id ? { ...p, copyCount: newCount } : p))
     );
+    if (prompt.visibility === 'public') {
+      CloudPromptService.incrementCopyCount(prompt.id, prompt.copyCount || 0);
+    }
   };
 
   const handleRestoreStarters = () => {
@@ -303,218 +370,234 @@ export const App: React.FC = () => {
   };
 
   return (
-    <AuthProvider>
-      <div className="app-layout">
-        {/* Fixed Top Header */}
-        <AppHeader
-          storageStatus={storageStatus}
-          totalPrompts={prompts.length}
-          onNewPrompt={handleOpenNewPrompt}
-          onToggleMobileSidebar={() => setIsMobileSidebarOpen((prev) => !prev)}
-        />
+    <div className="app-layout">
+      {/* Fixed Top Header */}
+      <AppHeader
+        storageStatus={storageStatus}
+        totalPrompts={prompts.length}
+        onNewPrompt={handleOpenNewPrompt}
+        onToggleMobileSidebar={() => setIsMobileSidebarOpen((prev) => !prev)}
+      />
 
-        {/* Fixed Left Navigation Sidebar */}
-        <Sidebar
-          selectedCategory={selectedCategory}
-          onSelectCategory={setSelectedCategory}
-          selectedFilter={selectedFilter}
-          onSelectFilter={setSelectedFilter}
-          totalCount={categoryCounts.total}
-          imageCount={categoryCounts.image}
-          videoCount={categoryCounts.video}
-          otherCount={categoryCounts.other}
-          favoritesCount={categoryCounts.favorites}
-          storageStatus={storageStatus}
-          onResetStarters={handleRestoreStarters}
-          isMobileOpen={isMobileSidebarOpen}
-          onCloseMobile={() => setIsMobileSidebarOpen(false)}
-          onNotify={addToast}
-        />
+      {/* Fixed Left Navigation Sidebar */}
+      <Sidebar
+        activeViewMode={activeViewMode}
+        onSelectViewMode={setActiveViewMode}
+        selectedCategory={selectedCategory}
+        onSelectCategory={setSelectedCategory}
+        selectedFilter={selectedFilter}
+        onSelectFilter={setSelectedFilter}
+        totalCount={categoryCounts.total}
+        exploreCount={publicPrompts.length}
+        imageCount={categoryCounts.image}
+        videoCount={categoryCounts.video}
+        otherCount={categoryCounts.other}
+        favoritesCount={categoryCounts.favorites}
+        storageStatus={storageStatus}
+        onResetStarters={handleRestoreStarters}
+        isMobileOpen={isMobileSidebarOpen}
+        onCloseMobile={() => setIsMobileSidebarOpen(false)}
+        onNotify={addToast}
+      />
 
-        {/* Workspace Area */}
-        <div className="workspace-pl">
-          <main className="main-content">
-            {/* Workspace Toolbar: Unified single bar with breathing space */}
-            <WorkspaceToolbar
-              searchQuery={searchQuery}
-              onSearchChange={setSearchQuery}
-              selectedCategory={selectedCategory}
-              sortBy={sortBy}
-              onSortChange={setSortBy}
-              viewMode={viewMode}
-              onViewModeChange={setViewMode}
-              totalFilteredCount={filteredPrompts.length}
-              totalStoredCount={prompts.length}
-            />
+      {/* Workspace Area */}
+      <div className="workspace-pl">
+        <main className="main-content">
+          {/* Workspace Toolbar: Unified single bar with breathing space */}
+          <WorkspaceToolbar
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            selectedCategory={selectedCategory}
+            sortBy={sortBy}
+            onSortChange={setSortBy}
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
+            totalFilteredCount={filteredPrompts.length}
+            totalStoredCount={activeViewMode === 'explore' ? publicPrompts.length : prompts.length}
+          />
 
-            {/* Primary Workspace Content Body: Gallery + Inspector */}
-            <div className="workspace-content-body">
-              {/* Dynamic Prompt Cards Gallery */}
-              <div className={`cards-canvas view-${viewMode}`} id="cardsCanvas">
-                {filteredPrompts.length > 0 ? (
-                  <>
-                    {filteredPrompts.map((prompt) => (
-                      <PromptCard
-                        key={prompt.id}
-                        prompt={prompt}
-                        isSelected={selectedPromptId === prompt.id}
-                        onSelect={(p) => setSelectedPromptId(p.id)}
-                        onEdit={handleEditPrompt}
-                        onDelete={handleDeletePromptRequest}
-                        onToggleFavorite={handleToggleFavorite}
-                        onCopySuccess={handleCopySuccess}
-                        onNotify={addToast}
-                      />
-                    ))}
+          {/* Primary Workspace Content Body: Gallery + Inspector */}
+          <div className="workspace-content-body">
+            {/* Dynamic Prompt Cards Gallery */}
+            <div className={`cards-canvas view-${viewMode}`} id="cardsCanvas">
+              {filteredPrompts.length > 0 ? (
+                <>
+                  {filteredPrompts.map((prompt) => (
+                    <PromptCard
+                      key={prompt.id}
+                      prompt={prompt}
+                      isSelected={selectedPromptId === prompt.id}
+                      onSelect={(p) => setSelectedPromptId(p.id)}
+                      onEdit={handleEditPrompt}
+                      onDelete={handleDeletePromptRequest}
+                      onToggleFavorite={handleToggleFavorite}
+                      onCopySuccess={handleCopySuccess}
+                      onFork={handleForkPrompt}
+                      onNotify={addToast}
+                    />
+                  ))}
 
-                    {/* Quick Add Placeholder Trigger Card */}
-                    <button
-                      type="button"
-                      className="prompt-card-placeholder"
-                      onClick={handleOpenNewPrompt}
-                      title="Click or press ⌘N to create a new prompt"
-                    >
-                      <div className="placeholder-plus-circle">
-                        <span className="material-symbols-outlined" style={{ fontSize: '24px' }}>
-                          add
-                        </span>
-                      </div>
-                      <span className="font-headline-sm" style={{ color: 'var(--on-surface)', marginBottom: '4px' }}>
-                        Create New Prompt Archetype
-                      </span>
-                      <span className="font-body-sm" style={{ color: 'var(--outline)', maxWidth: '280px' }}>
-                        Standardize tags, seed controls, and negative tokens for faster multi-model production.
-                      </span>
-                      <div
-                        style={{
-                          marginTop: '16px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          fontFamily: 'var(--font-mono)',
-                          fontSize: '11px',
-                          color: 'var(--outline)',
-                        }}
-                      >
-                        <span>Press</span>
-                        <span className="kbd-chip">⌘N</span>
-                      </div>
-                    </button>
-                  </>
-                ) : (
-                  /* Empty State */
-                  <div
-                    style={{
-                      gridColumn: '1 / -1',
-                      padding: '64px 24px',
-                      textAlign: 'center',
-                      backgroundColor: 'var(--surface-container-low)',
-                      border: '1px dashed var(--outline-variant)',
-                      borderRadius: 'var(--radius-lg)',
-                      maxWidth: '560px',
-                      margin: '32px auto',
-                    }}
+                  {/* Quick Add Placeholder Trigger Card */}
+                  <button
+                    type="button"
+                    className="prompt-card-placeholder"
+                    onClick={handleOpenNewPrompt}
+                    title="Click or press ⌘N to create a new prompt"
                   >
-                    <div
-                      style={{
-                        width: '48px',
-                        height: '48px',
-                        borderRadius: '50%',
-                        backgroundColor: 'rgba(0, 240, 255, 0.1)',
-                        color: 'var(--primary-container)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        margin: '0 auto 16px',
-                      }}
-                    >
+                    <div className="placeholder-plus-circle">
                       <span className="material-symbols-outlined" style={{ fontSize: '24px' }}>
-                        search
+                        add
                       </span>
                     </div>
-                    <h3 className="font-headline-sm" style={{ color: 'var(--on-surface)', marginBottom: '8px' }}>
-                      {prompts.length === 0 ? 'Your Prompt Vault is Empty' : 'No Matching Prompts Found'}
-                    </h3>
-                    <p className="font-body-sm" style={{ color: 'var(--outline)', marginBottom: '20px' }}>
-                      {prompts.length === 0
-                        ? 'Start saving your favorite AI video, image, and motion design prompts.'
-                        : 'No prompts match the current search query or active category filters.'}
-                    </p>
-                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}>
-                      {searchQuery && (
-                        <button
-                          type="button"
-                          className="btn-toolbar-new"
-                          style={{ backgroundColor: 'var(--surface-container-high)', color: 'var(--on-surface)' }}
-                          onClick={() => setSearchQuery('')}
-                        >
-                          Clear Search
-                        </button>
-                      )}
-                      {selectedCategory !== 'All' && (
-                        <button
-                          type="button"
-                          className="btn-toolbar-new"
-                          style={{ backgroundColor: 'var(--surface-container-high)', color: 'var(--on-surface)' }}
-                          onClick={() => setSelectedCategory('All')}
-                        >
-                          Show All Categories
-                        </button>
-                      )}
+                    <span className="font-headline-sm" style={{ color: 'var(--on-surface)', marginBottom: '4px' }}>
+                      Create New Prompt Archetype
+                    </span>
+                    <span className="font-body-sm" style={{ color: 'var(--outline)', maxWidth: '280px' }}>
+                      Standardize tags, seed controls, and negative tokens for faster multi-model production.
+                    </span>
+                    <div
+                      style={{
+                        marginTop: '16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: '11px',
+                        color: 'var(--outline)',
+                      }}
+                    >
+                      <span>Press</span>
+                      <span className="kbd-chip">⌘N</span>
+                    </div>
+                  </button>
+                </>
+              ) : (
+                /* Empty State */
+                <div
+                  style={{
+                    gridColumn: '1 / -1',
+                    padding: '64px 24px',
+                    textAlign: 'center',
+                    backgroundColor: 'var(--surface-container-low)',
+                    border: '1px dashed var(--outline-variant)',
+                    borderRadius: 'var(--radius-lg)',
+                    maxWidth: '560px',
+                    margin: '32px auto',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: '48px',
+                      height: '48px',
+                      borderRadius: '50%',
+                      backgroundColor: 'rgba(0, 240, 255, 0.1)',
+                      color: 'var(--primary-container)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      margin: '0 auto 16px',
+                    }}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: '24px' }}>
+                      search
+                    </span>
+                  </div>
+                  <h3 className="font-headline-sm" style={{ color: 'var(--on-surface)', marginBottom: '8px' }}>
+                    {activeViewMode === 'explore'
+                      ? 'No Public Prompts Found'
+                      : prompts.length === 0
+                      ? 'Your Prompt Vault is Empty'
+                      : 'No Matching Prompts Found'}
+                  </h3>
+                  <p className="font-body-sm" style={{ color: 'var(--outline)', marginBottom: '20px' }}>
+                    {activeViewMode === 'explore'
+                      ? 'Be the first to publish a public prompt to the community!'
+                      : prompts.length === 0
+                      ? 'Start saving your favorite AI video, image, and motion design prompts.'
+                      : 'No prompts match the current search query or active category filters.'}
+                  </p>
+                  <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                    {searchQuery && (
                       <button
                         type="button"
                         className="btn-toolbar-new"
-                        onClick={handleOpenNewPrompt}
+                        style={{ backgroundColor: 'var(--surface-container-high)', color: 'var(--on-surface)' }}
+                        onClick={() => setSearchQuery('')}
                       >
-                        + Create New Prompt
+                        Clear Search
                       </button>
-                    </div>
+                    )}
+                    {selectedCategory !== 'All' && (
+                      <button
+                        type="button"
+                        className="btn-toolbar-new"
+                        style={{ backgroundColor: 'var(--surface-container-high)', color: 'var(--on-surface)' }}
+                        onClick={() => setSelectedCategory('All')}
+                      >
+                        Show All Categories
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="btn-toolbar-new"
+                      onClick={handleOpenNewPrompt}
+                    >
+                      + Create New Prompt
+                    </button>
                   </div>
-                )}
-              </div>
-
-              {/* Right Inspector Rail */}
-              {viewMode !== 'dense' && (
-                <PromptInspector
-                  selectedPrompt={activePrompt}
-                  onNotify={addToast}
-                />
+                </div>
               )}
             </div>
-          </main>
 
-          {/* Fixed Bottom Status & Feedback Bar */}
-          <StatusBar
-            statusMessage={statusMessage}
-            storageStatus={storageStatus}
-            totalPrompts={prompts.length}
-          />
-        </div>
+            {/* Right Inspector Rail */}
+            {viewMode !== 'dense' && (
+              <PromptInspector
+                selectedPrompt={activePrompt}
+                onNotify={addToast}
+              />
+            )}
+          </div>
+        </main>
 
-        {/* Slide-Over Drawer for Add/Edit Prompt */}
-        <PromptEditorDrawer
-          isOpen={isDrawerOpen}
-          onClose={() => setIsDrawerOpen(false)}
-          onSubmit={handleSavePrompt}
-          onDeleteRequest={handleDeletePromptRequest}
-          initialPrompt={editingPrompt}
-          availableCategories={availableCategoryNames}
+        {/* Fixed Bottom Status & Feedback Bar */}
+        <StatusBar
+          statusMessage={statusMessage}
+          storageStatus={storageStatus}
+          totalPrompts={activeViewMode === 'explore' ? publicPrompts.length : prompts.length}
         />
-
-        {/* Destructive Deletion Confirmation Modal */}
-        <ConfirmModal
-          isOpen={Boolean(deletingPrompt)}
-          prompt={deletingPrompt}
-          onCancel={() => setDeletingPrompt(null)}
-          onConfirm={handleConfirmDelete}
-        />
-
-        {/* Toast Notification Queue */}
-        <Toast toasts={toasts} onDismiss={dismissToast} />
-
-        {/* Supabase Authentication Modal */}
-        <AuthModal onNotify={addToast} />
       </div>
+
+      {/* Slide-Over Drawer for Add/Edit Prompt */}
+      <PromptEditorDrawer
+        isOpen={isDrawerOpen}
+        onClose={() => setIsDrawerOpen(false)}
+        onSubmit={handleSavePrompt}
+        onDeleteRequest={handleDeletePromptRequest}
+        initialPrompt={editingPrompt}
+        availableCategories={availableCategoryNames}
+      />
+
+      {/* Destructive Deletion Confirmation Modal */}
+      <ConfirmModal
+        isOpen={Boolean(deletingPrompt)}
+        prompt={deletingPrompt}
+        onCancel={() => setDeletingPrompt(null)}
+        onConfirm={handleConfirmDelete}
+      />
+
+      {/* Toast Notification Queue */}
+      <Toast toasts={toasts} onDismiss={dismissToast} />
+
+      {/* Supabase Authentication Modal */}
+      <AuthModal onNotify={addToast} />
+    </div>
+  );
+};
+
+export const App: React.FC = () => {
+  return (
+    <AuthProvider>
+      <AppContent />
     </AuthProvider>
   );
 };

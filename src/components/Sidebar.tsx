@@ -18,12 +18,17 @@ const DEFAULT_ENGINES: EngineItem[] = [
 
 const ENGINES_STORAGE_KEY = 'prompt_vault_custom_engines_v1';
 
+export type ActiveViewMode = 'vault' | 'explore';
+
 interface SidebarProps {
+  activeViewMode: ActiveViewMode;
+  onSelectViewMode: (mode: ActiveViewMode) => void;
   selectedCategory: string;
   onSelectCategory: (category: string) => void;
   selectedFilter: string; // 'all' | 'favorites' | 'recent' | engine tag
   onSelectFilter: (filter: string) => void;
   totalCount: number;
+  exploreCount?: number;
   imageCount: number;
   videoCount: number;
   otherCount: number;
@@ -36,11 +41,14 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
+  activeViewMode,
+  onSelectViewMode,
   selectedCategory,
   onSelectCategory,
   selectedFilter,
   onSelectFilter,
   totalCount,
+  exploreCount = 0,
   imageCount,
   videoCount,
   otherCount,
@@ -147,6 +155,50 @@ export const Sidebar: React.FC<SidebarProps> = ({
         aria-label="Navigation sidebar"
       >
         <div className="sidebar-scroll-body">
+          {/* Section: View Mode */}
+          <span className="sidebar-section-title">Navigation</span>
+          <nav className="sidebar-nav-group" aria-label="Main view mode">
+            <button
+              type="button"
+              className={`sidebar-nav-item ${activeViewMode === 'vault' ? 'active' : ''}`}
+              onClick={() => {
+                onSelectViewMode('vault');
+                onCloseMobile();
+              }}
+            >
+              <div className="sidebar-item-left">
+                <span className="material-symbols-outlined" style={{ color: activeViewMode === 'vault' ? 'var(--primary-container)' : undefined }}>
+                  folder_special
+                </span>
+                <span className="font-body-sm" style={{ fontWeight: activeViewMode === 'vault' ? 600 : 400 }}>
+                  My Vault
+                </span>
+              </div>
+              <span className="sidebar-item-count">{totalCount}</span>
+            </button>
+
+            <button
+              type="button"
+              className={`sidebar-nav-item ${activeViewMode === 'explore' ? 'active' : ''}`}
+              onClick={() => {
+                onSelectViewMode('explore');
+                onCloseMobile();
+              }}
+            >
+              <div className="sidebar-item-left">
+                <span className="material-symbols-outlined" style={{ color: activeViewMode === 'explore' ? 'var(--primary-container)' : undefined }}>
+                  explore
+                </span>
+                <span className="font-body-sm" style={{ fontWeight: activeViewMode === 'explore' ? 600 : 400 }}>
+                  Explore Feed
+                </span>
+              </div>
+              <span className="sidebar-item-count" style={{ backgroundColor: 'rgba(0, 240, 255, 0.15)', color: 'var(--primary-container)' }}>
+                {exploreCount > 0 ? exploreCount : 'Live'}
+              </span>
+            </button>
+          </nav>
+
           {/* Section: Collections / Categories */}
           <span className="sidebar-section-title">Collections</span>
           <nav className="sidebar-nav-group" aria-label="Prompt categories">
