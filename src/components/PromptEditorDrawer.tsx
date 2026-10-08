@@ -8,19 +8,18 @@ interface PromptEditorDrawerProps {
   onDeleteRequest?: (prompt: PromptItem) => void;
   initialPrompt?: PromptItem | null;
   availableCategories: string[];
+  availableEngines?: string[];
 }
 
 const PRESET_CATEGORIES = ['Image', 'Video', 'Other'];
 
 const PRESET_ENGINES = [
-  'Runway Gen-3 Alpha',
-  'Midjourney v6.1',
-  'Flux.1 Dev / Schnell',
-  'Sora (OpenAI)',
-  'Kling AI 1.5',
+  'Runway Gen-3',
+  'Midjourney v6',
+  'Flux.1',
+  'Sora',
+  'Kling',
   'Luma Dream Machine',
-  'Stable Video Diffusion',
-  'Claude 3.5 Sonnet Directive',
 ];
 
 const PRESET_ASPECT_RATIOS = [
@@ -39,7 +38,9 @@ export const PromptEditorDrawer: React.FC<PromptEditorDrawerProps> = ({
   onSubmit,
   onDeleteRequest,
   initialPrompt,
+  availableEngines,
 }) => {
+  const engineOptions = availableEngines && availableEngines.length > 0 ? availableEngines : PRESET_ENGINES;
   const { user, openAuthModal } = useAuth();
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState(PRESET_CATEGORIES[0]);
@@ -320,7 +321,7 @@ export const PromptEditorDrawer: React.FC<PromptEditorDrawerProps> = ({
                 value={engine}
                 onChange={(e) => setEngine(e.target.value)}
               >
-                {PRESET_ENGINES.map((eng) => (
+                {engineOptions.map((eng) => (
                   <option key={eng} value={eng}>
                     {eng}
                   </option>

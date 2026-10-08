@@ -30,7 +30,8 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const displayName = profile?.display_name || user?.email?.split('@')[0] || 'Creator';
+  const rawDisplayName = profile?.display_name || user?.user_metadata?.display_name || user?.email?.split('@')[0] || 'Creator';
+  const displayName = rawDisplayName.trim() || 'Creator';
   const handleTag = profile?.username ? `@${profile.username}` : user?.email || 'cloud active';
 
   return (

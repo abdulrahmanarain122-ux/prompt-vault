@@ -1,22 +1,15 @@
 import React, { useState } from 'react';
 import type { StorageStatus } from '../types/prompt';
 
-interface EngineItem {
-  id: string;
-  label: string;
-  query: string;
-  isCustom?: boolean;
-}
-
-const DEFAULT_ENGINES: EngineItem[] = [
-  { id: 'engine-midjourney', label: 'Midjourney v6', query: 'midjourney' },
-  { id: 'engine-runway', label: 'Runway Gen-3', query: 'runway' },
-  { id: 'engine-sora', label: 'Sora', query: 'sora' },
-  { id: 'engine-kling', label: 'Kling', query: 'kling' },
-  { id: 'engine-flux', label: 'Flux.1', query: 'flux' },
+export const DEFAULT_ENGINE_LABELS = [
+  'Midjourney v6',
+  'Runway Gen-3',
+  'Sora',
+  'Kling',
+  'Flux.1',
 ];
 
-const ENGINES_STORAGE_KEY = 'prompt_vault_custom_engines_v1';
+const ENGINES_STORAGE_KEY = 'prompt_vault_managed_engines_v2';
 
 export type ActiveViewMode = 'vault' | 'explore';
 
@@ -37,6 +30,7 @@ interface SidebarProps {
   onResetStarters: () => void;
   isMobileOpen: boolean;
   onCloseMobile: () => void;
+  onEnginesChange?: (engines: string[]) => void;
   onNotify?: (message: string, type?: 'success' | 'error') => void;
 }
 
@@ -56,33 +50,46 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onResetStarters,
   isMobileOpen,
   onCloseMobile,
+  onEnginesChange,
   onNotify,
 }) => {
-  const [customEngines, setCustomEngines] = useState<string[]>(() => {
+  const [engines, setEngines] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem(ENGINES_STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) return parsed;
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
     } catch {
       // ignore
     }
-    return [];
+    return DEFAULT_ENGINE_LABELS;
   });
 
   const [isAddingEngine, setIsAddingEngine] = useState(false);
   const [newEngineName, setNewEngineName] = useState('');
 
-  const allEngines = [
-    ...DEFAULT_ENGINES,
-    ...customEngines.map((name) => ({
-      id: `custom-${name.toLowerCase().replace(/\s+/g, '-')}`,
-      label: name,
-      query: name.toLowerCase(),
-      isCustom: true,
-    })),
-  ];
+  // Ref to hold onEnginesChange to prevent infinite loop
+  const onEnginesChangeRef = React.useRef(onEnginesChange);
+  React.useEffect(() => {
+    onEnginesChangeRef.current = onEnginesChange;
+  }, [onEnginesChange]);
+
+  // Safely notify parent of engine list changes only when array content actually changes
+  const prevEnginesStrRef = React.useRef('');
+  React.useEffect(() => {
+    const currentStr = JSON.stringify(engines);
+    if (prevEnginesStrRef.current !== currentStr) {
+      prevEnginesStrRef.current = currentStr;
+      onEnginesChangeRef.current?.(engines);
+    }
+  }, [engines]);
+
+  const engineItems = engines.map((name) => ({
+    id: `engine-${name.toLowerCase().replace(/[^a-z0-9]/g, '-')}`,
+    label: name,
+    query: name.toLowerCase(),
+  }));
 
   const handleAddEngineSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -91,40 +98,49 @@ export const Sidebar: React.FC<SidebarProps> = ({
       setIsAddingEngine(false);
       return;
     }
-    const exists = allEngines.some(
-      (eng) => eng.label.toLowerCase() === trimmed.toLowerCase()
-    );
+    const exists = engines.some((name) => name.toLowerCase() === trimmed.toLowerCase());
     if (exists) {
       onNotify?.(`Engine "${trimmed}" already exists.`);
       setIsAddingEngine(false);
       setNewEngineName('');
       return;
     }
-    const updated = [...customEngines, trimmed];
-    setCustomEngines(updated);
+    const updated = [...engines, trimmed];
+    setEngines(updated);
     try {
       localStorage.setItem(ENGINES_STORAGE_KEY, JSON.stringify(updated));
     } catch (err) {
-      console.warn('Failed to save engine to storage:', err);
+      console.warn('Failed to save engines to storage:', err);
     }
     onNotify?.(`Added engine "${trimmed}"`, 'success');
     setNewEngineName('');
     setIsAddingEngine(false);
   };
 
-  const handleRemoveCustomEngine = (e: React.MouseEvent, engineName: string) => {
+  const handleRemoveEngine = (e: React.MouseEvent, engineName: string) => {
     e.stopPropagation();
-    const updated = customEngines.filter((n) => n !== engineName);
-    setCustomEngines(updated);
+    const updated = engines.filter((n) => n !== engineName);
+    setEngines(updated);
     try {
       localStorage.setItem(ENGINES_STORAGE_KEY, JSON.stringify(updated));
     } catch (err) {
-      console.warn('Failed to save engine to storage:', err);
+      console.warn('Failed to save engines to storage:', err);
     }
     if (selectedFilter === engineName.toLowerCase()) {
       onSelectFilter('');
     }
     onNotify?.(`Removed engine "${engineName}"`);
+  };
+
+  const handleRestoreDefaultEngines = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEngines(DEFAULT_ENGINE_LABELS);
+    try {
+      localStorage.setItem(ENGINES_STORAGE_KEY, JSON.stringify(DEFAULT_ENGINE_LABELS));
+    } catch (err) {
+      console.warn('Failed to save engines to storage:', err);
+    }
+    onNotify?.('Restored default model engines.', 'success');
   };
 
   const handleCategoryClick = (cat: string) => {
@@ -284,21 +300,34 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {/* Section: Model Engines */}
           <div className="sidebar-section-header">
             <span className="sidebar-section-title">Model Engines</span>
-            <button
-              type="button"
-              className="btn-add-engine-icon"
-              onClick={() => setIsAddingEngine((prev) => !prev)}
-              title={isAddingEngine ? 'Close' : 'Add model engine'}
-              aria-label="Add model engine"
-            >
-              <span className="material-symbols-outlined" style={{ fontSize: '15px' }}>
-                {isAddingEngine ? 'close' : 'add'}
-              </span>
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+              <button
+                type="button"
+                className="btn-add-engine-icon"
+                onClick={handleRestoreDefaultEngines}
+                title="Restore default model engines"
+                aria-label="Restore default model engines"
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>
+                  restart_alt
+                </span>
+              </button>
+              <button
+                type="button"
+                className="btn-add-engine-icon"
+                onClick={() => setIsAddingEngine((prev) => !prev)}
+                title={isAddingEngine ? 'Close' : 'Add model engine'}
+                aria-label="Add model engine"
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: '15px' }}>
+                  {isAddingEngine ? 'close' : 'add'}
+                </span>
+              </button>
+            </div>
           </div>
 
           <div className="sidebar-nav-group" role="group" aria-label="Filter by AI model engine">
-            {allEngines.map((engine) => (
+            {engineItems.map((engine) => (
               <div
                 key={engine.id}
                 className={`sidebar-nav-item ${selectedFilter === engine.query ? 'active' : ''}`}
@@ -315,19 +344,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <span className="engine-bullet" aria-hidden="true" />
                   <span className="font-code-sm">{engine.label}</span>
                 </div>
-                {engine.isCustom && (
-                  <button
-                    type="button"
-                    className="btn-remove-engine"
-                    onClick={(e) => handleRemoveCustomEngine(e, engine.label)}
-                    title={`Remove custom engine ${engine.label}`}
-                    aria-label={`Remove engine ${engine.label}`}
-                  >
-                    <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>
-                      close
-                    </span>
-                  </button>
-                )}
+                <button
+                  type="button"
+                  className="btn-remove-engine"
+                  onClick={(e) => handleRemoveEngine(e, engine.label)}
+                  title={`Remove engine ${engine.label}`}
+                  aria-label={`Remove engine ${engine.label}`}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>
+                    close
+                  </span>
+                </button>
               </div>
             ))}
 

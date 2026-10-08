@@ -39,10 +39,15 @@ const AppContent: React.FC = () => {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [editingPrompt, setEditingPrompt] = useState<PromptItem | null>(null);
   const [deletingPrompt, setDeletingPrompt] = useState<PromptItem | null>(null);
+  const [availableEngines, setAvailableEngines] = useState<string[]>([]);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [statusMessage, setStatusMessage] = useState(
     '✓ Ready • Tap copy icon on any tile to capture prompt'
   );
+
+  const handleEnginesChange = useCallback((list: string[]) => {
+    setAvailableEngines(list);
+  }, []);
 
   // Push toast message & update bottom status bar
   const addToast = useCallback((text: string, type: 'success' | 'error' = 'success') => {
@@ -477,6 +482,7 @@ const AppContent: React.FC = () => {
         onResetStarters={handleRestoreStarters}
         isMobileOpen={isMobileSidebarOpen}
         onCloseMobile={() => setIsMobileSidebarOpen(false)}
+        onEnginesChange={handleEnginesChange}
         onNotify={addToast}
       />
 
@@ -657,6 +663,7 @@ const AppContent: React.FC = () => {
         onDeleteRequest={handleDeletePromptRequest}
         initialPrompt={editingPrompt}
         availableCategories={availableCategoryNames}
+        availableEngines={availableEngines}
       />
 
       {/* Destructive Deletion Confirmation Modal */}
