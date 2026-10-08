@@ -1,11 +1,13 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import type { PromptItem, PromptFormInput, StorageStatus } from './types/prompt';
 import { StorageService } from './services/storageService';
-import { Header } from './components/Header';
-import { Toolbar } from './components/Toolbar';
+import { AppHeader } from './components/AppHeader';
+import { Sidebar } from './components/Sidebar';
+import { WorkspaceToolbar, type ViewMode } from './components/WorkspaceToolbar';
 import { PromptCard } from './components/PromptCard';
 import { PromptModal } from './components/PromptModal';
 import { ConfirmModal } from './components/ConfirmModal';
+import { StatusBar } from './components/StatusBar';
 import { Toast } from './components/Toast';
 import type { ToastMessage } from './components/Toast';
 
@@ -18,12 +20,23 @@ export const App: React.FC = () => {
   });
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const [selectedFilter, setSelectedFilter] = useState('');
+  const [selectedEngineTag, setSelectedEngineTag] = useState('');
+  const [selectedAspectRatio, setSelectedAspectRatio] = useState('');
+  const [sortBy, setSortBy] = useState('newest');
+  const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [selectedPromptId, setSelectedPromptId] = useState<string | null>(null);
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingPrompt, setEditingPrompt] = useState<PromptItem | null>(null);
   const [deletingPrompt, setDeletingPrompt] = useState<PromptItem | null>(null);
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const [statusMessage, setStatusMessage] = useState(
+    '✓ Ready • Tap copy icon on any tile to capture prompt'
+  );
 
-  // Push toast message
+  // Push toast message & update status bar message
   const addToast = useCallback((text: string, type: 'success' | 'error' = 'success') => {
     const newToast: ToastMessage = {
       id: 'toast_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
@@ -31,6 +44,7 @@ export const App: React.FC = () => {
       type,
     };
     setToasts((prev) => [...prev, newToast]);
+    setStatusMessage(`${type === 'success' ? '✓' : '⚠'} ${text}`);
   }, []);
 
   const dismissToast = useCallback((id: string) => {
@@ -51,6 +65,9 @@ export const App: React.FC = () => {
     try {
       const loaded = StorageService.getAll();
       setPrompts(loaded);
+      if (loaded.length > 0) {
+        setSelectedPromptId(loaded[0].id);
+      }
       refreshStorage();
     } catch (err) {
       console.error('Initialization error:', err);
@@ -58,46 +75,86 @@ export const App: React.FC = () => {
     }
   }, [refreshStorage, addToast]);
 
-  // Global keyboard shortcuts (Ctrl+N or Alt+N to open new prompt)
+  // Global keyboard shortcuts (Alt+N or Ctrl+N to open new prompt)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.altKey && e.key.toLowerCase() === 'n') || (e.ctrlKey && e.key.toLowerCase() === 'n' && !e.shiftKey)) {
-        // Prevent default browser new window if alt+n
-        if (e.altKey) {
-          e.preventDefault();
-          setEditingPrompt(null);
-          setIsModalOpen(true);
-        }
+        e.preventDefault();
+        setEditingPrompt(null);
+        setIsModalOpen(true);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
-  // Extract categories with counts
-  const categoriesWithCounts = useMemo(() => {
-    const map = new Map<string, number>();
+  // Category counts
+  const categoryCounts = useMemo(() => {
+    let image = 0;
+    let video = 0;
+    let animation = 0;
+    let other = 0;
+
     for (const p of prompts) {
-      const cat = p.category.trim();
-      map.set(cat, (map.get(cat) || 0) + 1);
+      const lower = p.category.toLowerCase();
+      if (lower.includes('image')) image++;
+      else if (lower.includes('video')) video++;
+      else if (lower.includes('animation')) animation++;
+      else other++;
     }
-    return Array.from(map.entries()).map(([name, count]) => ({ name, count }));
+
+    return {
+      image,
+      video,
+      animation,
+      other,
+      total: prompts.length,
+    };
   }, [prompts]);
 
   const availableCategoryNames = useMemo(() => {
-    return categoriesWithCounts.map((c) => c.name);
-  }, [categoriesWithCounts]);
+    const set = new Set(prompts.map((p) => p.category.trim()));
+    return Array.from(set);
+  }, [prompts]);
 
-  // Filtered prompts by Category and Search Query
+  // Filtered & sorted prompts
   const filteredPrompts = useMemo(() => {
-    let result = prompts;
+    let result = [...prompts];
 
+    // Category filter
     if (selectedCategory !== 'All') {
+      const targetCat = selectedCategory.trim().toLowerCase();
+      result = result.filter((p) => {
+        const itemCat = p.category.trim().toLowerCase();
+        if (targetCat.includes('image')) return itemCat.includes('image');
+        if (targetCat.includes('video')) return itemCat.includes('video');
+        if (targetCat.includes('animation')) return itemCat.includes('animation');
+        return itemCat === targetCat;
+      });
+    }
+
+    // Engine Tag filter
+    if (selectedEngineTag) {
+      const tag = selectedEngineTag.toLowerCase();
       result = result.filter(
-        (p) => p.category.trim().toLowerCase() === selectedCategory.trim().toLowerCase()
+        (p) =>
+          p.body.toLowerCase().includes(tag) ||
+          p.title.toLowerCase().includes(tag) ||
+          p.category.toLowerCase().includes(tag)
       );
     }
 
+    // Aspect Ratio filter
+    if (selectedAspectRatio) {
+      const ar = selectedAspectRatio.toLowerCase();
+      result = result.filter(
+        (p) =>
+          p.body.toLowerCase().includes(ar) ||
+          p.body.toLowerCase().includes(`--ar ${ar}`)
+      );
+    }
+
+    // Search query filter
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
       result = result.filter(
@@ -108,8 +165,15 @@ export const App: React.FC = () => {
       );
     }
 
+    // Sorting
+    if (sortBy === 'newest') {
+      result.sort((a, b) => b.updatedAt - a.updatedAt);
+    } else if (sortBy === 'title') {
+      result.sort((a, b) => a.title.localeCompare(b.title));
+    }
+
     return result;
-  }, [prompts, selectedCategory, searchQuery]);
+  }, [prompts, selectedCategory, selectedEngineTag, selectedAspectRatio, searchQuery, sortBy]);
 
   // Handlers
   const handleOpenNewPrompt = () => {
@@ -133,6 +197,9 @@ export const App: React.FC = () => {
       setPrompts((prev) => prev.filter((p) => p.id !== deletingPrompt.id));
       refreshStorage();
       addToast(`Deleted prompt "${deletingPrompt.title}".`, 'success');
+      if (selectedPromptId === deletingPrompt.id) {
+        setSelectedPromptId(null);
+      }
     } catch (err) {
       addToast(err instanceof Error ? err.message : 'Failed to delete prompt', 'error');
     } finally {
@@ -146,10 +213,12 @@ export const App: React.FC = () => {
         const updated = StorageService.update(editId, input);
         setPrompts((prev) => prev.map((p) => (p.id === editId ? updated : p)));
         addToast(`Updated "${updated.title}" successfully!`, 'success');
+        setSelectedPromptId(updated.id);
       } else {
         const created = StorageService.create(input);
         setPrompts((prev) => [created, ...prev]);
         addToast(`Saved "${created.title}" to vault!`, 'success');
+        setSelectedPromptId(created.id);
       }
       refreshStorage();
     } catch (err) {
@@ -158,155 +227,216 @@ export const App: React.FC = () => {
   };
 
   const handleRestoreStarters = () => {
-    if (window.confirm('Reset vault back to initial motion and video starter prompts? Any current custom prompts will be replaced.')) {
+    if (
+      window.confirm(
+        'Reset vault back to initial motion and video starter prompts? Any current custom prompts will be replaced.'
+      )
+    ) {
       const restored = StorageService.resetToStarters();
       setPrompts(restored);
       setSelectedCategory('All');
+      setSelectedFilter('');
+      setSelectedEngineTag('');
+      setSelectedAspectRatio('');
       setSearchQuery('');
       refreshStorage();
-      addToast('Restored 6 motion & video starter prompts.', 'success');
+      addToast('Restored motion & video starter prompts.', 'success');
+      if (restored.length > 0) {
+        setSelectedPromptId(restored[0].id);
+      }
     }
   };
 
+  const handleFocusSearch = () => {
+    const input = document.getElementById('workspace-search-input') as HTMLInputElement;
+    input?.focus();
+  };
+
   return (
-    <div className="app-wrapper">
-      {/* Header & Storage Notice */}
-      <Header
+    <div className="app-layout">
+      {/* Fixed Header */}
+      <AppHeader
         storageStatus={storageStatus}
+        totalPrompts={prompts.length}
         onNewPrompt={handleOpenNewPrompt}
+        onFocusSearch={handleFocusSearch}
+        onToggleMobileSidebar={() => setIsMobileSidebarOpen((prev) => !prev)}
         onResetStarters={handleRestoreStarters}
       />
 
-      <main className="main-container content-section">
-        {/* Search & Category Pills */}
-        <Toolbar
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-          categories={categoriesWithCounts}
-          selectedCategory={selectedCategory}
-          onSelectCategory={setSelectedCategory}
-          totalCount={prompts.length}
-        />
+      {/* Fixed Left Navigation Sidebar */}
+      <Sidebar
+        selectedCategory={selectedCategory}
+        onSelectCategory={setSelectedCategory}
+        selectedFilter={selectedFilter}
+        onSelectFilter={setSelectedFilter}
+        totalCount={categoryCounts.total}
+        imageCount={categoryCounts.image}
+        videoCount={categoryCounts.video}
+        animationCount={categoryCounts.animation}
+        otherCount={categoryCounts.other}
+        favoritesCount={0}
+        storageStatus={storageStatus}
+        onResetStarters={handleRestoreStarters}
+        isMobileOpen={isMobileSidebarOpen}
+        onCloseMobile={() => setIsMobileSidebarOpen(false)}
+      />
 
-        {/* Results Metadata */}
-        <div className="results-meta-bar">
-          <span>
-            Showing <strong>{filteredPrompts.length}</strong> of {prompts.length} prompts
-            {selectedCategory !== 'All' ? ` in ${selectedCategory}` : ''}
-            {searchQuery ? ` matching "${searchQuery}"` : ''}
-          </span>
-          {searchQuery && (
-            <button
-              type="button"
-              className="text-btn"
-              onClick={() => setSearchQuery('')}
-            >
-              Clear search filter
-            </button>
-          )}
-        </div>
+      {/* Workspace Area with 256px Left Padding on Desktop */}
+      <div className="workspace-pl">
+        <main className="main-content">
+          {/* Workspace Context & Filter Ribbon */}
+          <WorkspaceToolbar
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            selectedCategory={selectedCategory}
+            onSelectCategory={setSelectedCategory}
+            selectedEngineTag={selectedEngineTag}
+            onSelectEngineTag={setSelectedEngineTag}
+            selectedAspectRatio={selectedAspectRatio}
+            onSelectAspectRatio={setSelectedAspectRatio}
+            sortBy={sortBy}
+            onSortChange={setSortBy}
+            viewMode={viewMode}
+            onViewModeChange={setViewMode}
+            totalFilteredCount={filteredPrompts.length}
+            totalStoredCount={prompts.length}
+            onNewPrompt={handleOpenNewPrompt}
+            onBatchAction={handleRestoreStarters}
+          />
 
-        {/* Prompts Grid */}
-        {filteredPrompts.length > 0 ? (
-          <div className="prompt-grid">
-            {filteredPrompts.map((prompt) => (
-              <PromptCard
-                key={prompt.id}
-                prompt={prompt}
-                onEdit={handleEditPrompt}
-                onDelete={handleDeletePromptRequest}
-                onNotify={addToast}
-              />
-            ))}
-          </div>
-        ) : (
-          /* Helpful Empty State */
-          <div className="empty-state-card">
-            <div className="empty-icon-circle" aria-hidden="true">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <circle cx="11" cy="11" r="8" />
-                <line x1="21" y1="21" x2="16.65" y2="16.65" />
-              </svg>
-            </div>
-            {prompts.length === 0 ? (
-              <>
-                <h3 className="empty-state-title">Your Prompt Vault is Empty</h3>
-                <p className="empty-state-desc">
-                  Start collecting your favorite AI video generation, image concept, and After Effects expression prompts.
-                </p>
-                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+          {/* Primary Workspace Content Body */}
+          <div className="workspace-content-body">
+            {/* Main Cards Gallery */}
+            <div className={`cards-canvas view-${viewMode}`}>
+              {filteredPrompts.length > 0 ? (
+                <>
+                  {filteredPrompts.map((prompt) => (
+                    <PromptCard
+                      key={prompt.id}
+                      prompt={prompt}
+                      onEdit={handleEditPrompt}
+                      onDelete={handleDeletePromptRequest}
+                      onNotify={addToast}
+                    />
+                  ))}
+
+                  {/* Quick Add Placeholder Trigger Tile */}
                   <button
                     type="button"
-                    className="btn-primary"
+                    className="prompt-card-placeholder"
                     onClick={handleOpenNewPrompt}
                   >
-                    + Create First Prompt
+                    <div className="placeholder-plus-circle">
+                      <span className="material-symbols-outlined" style={{ fontSize: '24px' }}>
+                        add
+                      </span>
+                    </div>
+                    <span className="font-headline-sm" style={{ color: 'var(--on-surface)', marginBottom: '4px' }}>
+                      Create New Prompt Archetype
+                    </span>
+                    <span className="font-body-sm" style={{ color: 'var(--outline)', maxWidth: '280px' }}>
+                      Standardize tags, seed controls, and negative tokens for faster multi-model production.
+                    </span>
+                    <div
+                      style={{
+                        marginTop: '16px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: '11px',
+                        color: 'var(--outline)',
+                      }}
+                    >
+                      <span>Press</span>
+                      <span className="kbd-chip">⌘N</span>
+                    </div>
                   </button>
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    onClick={() => {
-                      const restored = StorageService.resetToStarters();
-                      setPrompts(restored);
-                      refreshStorage();
+                </>
+              ) : (
+                /* Empty State */
+                <div
+                  style={{
+                    gridColumn: '1 / -1',
+                    padding: '64px 24px',
+                    textAlign: 'center',
+                    backgroundColor: 'var(--surface-container-low)',
+                    border: '1px dashed var(--outline-variant)',
+                    borderRadius: 'var(--radius-lg)',
+                    maxWidth: '560px',
+                    margin: '32px auto',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: '48px',
+                      height: '48px',
+                      borderRadius: '50%',
+                      backgroundColor: 'rgba(0, 240, 255, 0.1)',
+                      color: 'var(--primary-container)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      margin: '0 auto 16px',
                     }}
                   >
-                    Restore Starter Prompts
-                  </button>
-                </div>
-              </>
-            ) : (
-              <>
-                <h3 className="empty-state-title">No Matching Prompts Found</h3>
-                <p className="empty-state-desc">
-                  No prompts match your current search query or category filter. Try clearing your filters or adding a new prompt.
-                </p>
-                <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
-                  {searchQuery && (
+                    <span className="material-symbols-outlined" style={{ fontSize: '24px' }}>
+                      search
+                    </span>
+                  </div>
+                  <h3 className="font-headline-sm" style={{ color: 'var(--on-surface)', marginBottom: '8px' }}>
+                    {prompts.length === 0 ? 'Your Prompt Vault is Empty' : 'No Matching Prompts Found'}
+                  </h3>
+                  <p className="font-body-sm" style={{ color: 'var(--outline)', marginBottom: '20px' }}>
+                    {prompts.length === 0
+                      ? 'Start saving your favorite AI video, image, and motion design prompts.'
+                      : 'No prompts match the current search query or active category filters.'}
+                  </p>
+                  <div style={{ display: 'flex', gap: '8px', justifyContent: 'center', flexWrap: 'wrap' }}>
+                    {searchQuery && (
+                      <button
+                        type="button"
+                        className="btn-toolbar-new"
+                        style={{ backgroundColor: 'var(--surface-container-high)', color: 'var(--on-surface)' }}
+                        onClick={() => setSearchQuery('')}
+                      >
+                        Clear Search
+                      </button>
+                    )}
+                    {selectedCategory !== 'All' && (
+                      <button
+                        type="button"
+                        className="btn-toolbar-new"
+                        style={{ backgroundColor: 'var(--surface-container-high)', color: 'var(--on-surface)' }}
+                        onClick={() => setSelectedCategory('All')}
+                      >
+                        Show All Categories
+                      </button>
+                    )}
                     <button
                       type="button"
-                      className="btn-secondary"
-                      onClick={() => setSearchQuery('')}
+                      className="btn-toolbar-new"
+                      onClick={handleOpenNewPrompt}
                     >
-                      Clear Search Query
+                      + Create New Prompt
                     </button>
-                  )}
-                  {selectedCategory !== 'All' && (
-                    <button
-                      type="button"
-                      className="btn-secondary"
-                      onClick={() => setSelectedCategory('All')}
-                    >
-                      Show All Categories
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    className="btn-primary"
-                    onClick={handleOpenNewPrompt}
-                  >
-                    + Create New Prompt
-                  </button>
+                  </div>
                 </div>
-              </>
-            )}
+              )}
+            </div>
           </div>
-        )}
-      </main>
+        </main>
 
-      {/* Footer */}
-      <footer className="site-footer">
-        <div className="main-container footer-inner">
-          <div>
-            <strong>Prompt Vault</strong> &bull; Client-side personal prompt library for creative video & motion workflows.
-          </div>
-          <div>
-            No server storage &bull; Zero tracking &bull; Powered by browser localStorage
-          </div>
-        </div>
-      </footer>
+        {/* Fixed Bottom Status & Feedback Bar */}
+        <StatusBar
+          statusMessage={statusMessage}
+          storageStatus={storageStatus}
+          totalPrompts={prompts.length}
+        />
+      </div>
 
-      {/* Modals & Toasts */}
+      {/* Modal Dialog for Add/Edit (Preserved while Phase 4 Slide-over Drawer is prepared) */}
       <PromptModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
@@ -315,6 +445,7 @@ export const App: React.FC = () => {
         availableCategories={availableCategoryNames}
       />
 
+      {/* Confirmation Dialog */}
       <ConfirmModal
         isOpen={Boolean(deletingPrompt)}
         prompt={deletingPrompt}
@@ -322,6 +453,7 @@ export const App: React.FC = () => {
         onConfirm={handleConfirmDelete}
       />
 
+      {/* Toast Notification Queue */}
       <Toast toasts={toasts} onDismiss={dismissToast} />
     </div>
   );
