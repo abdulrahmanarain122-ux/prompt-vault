@@ -17,6 +17,13 @@ export interface PromptItem {
   aspectRatio?: string;
   tags?: string[];
   negativePrompt?: string;
+  // Cloud Sharing & Visibility (Phase 3+)
+  visibility?: 'public' | 'private';
+  userId?: string;
+  authorUsername?: string;
+  authorAvatarUrl?: string;
+  forkCount?: number;
+  shareUrl?: string;
 }
 
 export type PromptFormInput = {
@@ -27,6 +34,7 @@ export type PromptFormInput = {
   aspectRatio?: string;
   tags?: string[];
   negativePrompt?: string;
+  visibility?: 'public' | 'private';
 };
 
 export interface StorageStatus {
