@@ -96,7 +96,6 @@ export const App: React.FC = () => {
   const categoryCounts = useMemo(() => {
     let image = 0;
     let video = 0;
-    let animation = 0;
     let other = 0;
     let favorites = 0;
 
@@ -105,14 +104,12 @@ export const App: React.FC = () => {
       const lower = p.category.toLowerCase();
       if (lower.includes('image')) image++;
       else if (lower.includes('video')) video++;
-      else if (lower.includes('animation') || lower.includes('motion')) animation++;
       else other++;
     }
 
     return {
       image,
       video,
-      animation,
       other,
       favorites,
       total: prompts.length,
@@ -152,7 +149,6 @@ export const App: React.FC = () => {
         const itemCat = p.category.trim().toLowerCase();
         if (targetCat.includes('image')) return itemCat.includes('image');
         if (targetCat.includes('video')) return itemCat.includes('video');
-        if (targetCat.includes('animation')) return itemCat.includes('animation') || itemCat.includes('motion');
         return itemCat === targetCat;
       });
     }
@@ -323,7 +319,6 @@ export const App: React.FC = () => {
         totalCount={categoryCounts.total}
         imageCount={categoryCounts.image}
         videoCount={categoryCounts.video}
-        animationCount={categoryCounts.animation}
         otherCount={categoryCounts.other}
         favoritesCount={categoryCounts.favorites}
         storageStatus={storageStatus}

@@ -14,7 +14,7 @@ export const STARTER_PROMPTS: PromptItem[] = [
   {
     id: 'starter-2',
     title: 'Inertial Bounce Spring Physics Expression',
-    category: 'Animation prompt',
+    category: 'Other',
     body: `// Inertial Bounce for AE Position/Scale\namp = .06;\nfreq = 3.5;\ndecay = 5.0;\nn = 0;\nif (numKeys > 0){ n = nearestKey(time).index; if (key(n).time > time){ n--; } }\nif (n == 0){ t = 0; } else { t = time - key(n).time; }\nif (n > 0 && t < 1){ v = velocityAtTime(key(n).time - thisComp.frameDuration/10); value + v*amp*Math.sin(freq*t*2*Math.PI)/Math.exp(decay*t); } else { value; }`,
     createdAt: Date.now() - 1000 * 60 * 60 * 24 * 2,
     updatedAt: Date.now() - 1000 * 60 * 60 * 24 * 2,
@@ -94,7 +94,22 @@ export const StorageService = {
       }
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        return parsed;
+        let migrated = false;
+        const cleaned = parsed.map((item: PromptItem) => {
+          if (item && item.category && item.category.toLowerCase().includes('animation')) {
+            migrated = true;
+            return { ...item, category: 'Other' };
+          }
+          return item;
+        });
+        if (migrated) {
+          try {
+            window.localStorage.setItem(STORAGE_KEY, JSON.stringify(cleaned));
+          } catch {
+            // ignore
+          }
+        }
+        return cleaned;
       }
       return STARTER_PROMPTS;
     } catch (err) {

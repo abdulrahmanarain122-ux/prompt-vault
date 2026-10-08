@@ -1,7 +1,6 @@
 export type PromptCategory =
   | 'Image prompt'
   | 'Video prompt'
-  | 'Animation prompt'
   | 'Other'
   | string;
 

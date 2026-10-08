@@ -10,7 +10,7 @@ interface PromptEditorDrawerProps {
   availableCategories: string[];
 }
 
-const PRESET_CATEGORIES = ['Image', 'Video', 'Animation', 'Other'];
+const PRESET_CATEGORIES = ['Image', 'Video', 'Other'];
 
 const PRESET_ENGINES = [
   'Runway Gen-3 Alpha',

@@ -26,7 +26,6 @@ interface SidebarProps {
   totalCount: number;
   imageCount: number;
   videoCount: number;
-  animationCount: number;
   otherCount: number;
   favoritesCount: number;
   storageStatus: StorageStatus;
@@ -44,7 +43,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   totalCount,
   imageCount,
   videoCount,
-  animationCount,
   otherCount,
   storageStatus,
   onResetStarters,
@@ -191,18 +189,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <span className="sidebar-item-count">{videoCount}</span>
             </button>
 
-            {/* Animation */}
-            <button
-              type="button"
-              className={`sidebar-nav-item ${selectedCategory.toLowerCase().includes('animation') && !selectedFilter ? 'active' : ''}`}
-              onClick={() => handleCategoryClick('Animation prompt')}
-            >
-              <div className="sidebar-item-left">
-                <span className="material-symbols-outlined">animation</span>
-                <span className="font-body-sm">Animation</span>
-              </div>
-              <span className="sidebar-item-count">{animationCount}</span>
-            </button>
 
             {/* Other */}
             <button

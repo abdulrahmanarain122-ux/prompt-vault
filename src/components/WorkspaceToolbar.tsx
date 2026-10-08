@@ -51,7 +51,6 @@ export const WorkspaceToolbar: React.FC<WorkspaceToolbarProps> = ({
     if (selectedCategory === 'All') return 'All Prompts';
     if (selectedCategory.toLowerCase().includes('image')) return 'Image';
     if (selectedCategory.toLowerCase().includes('video')) return 'Video';
-    if (selectedCategory.toLowerCase().includes('animation')) return 'Animation';
     return selectedCategory;
   };
 

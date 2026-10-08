@@ -28,16 +28,13 @@ function formatRelativeTime(timestamp: number): string {
 }
 
 function getCategoryTheme(category: string): {
-  type: 'video' | 'image' | 'animation' | 'other';
+  type: 'video' | 'image' | 'other';
   label: string;
   defaultEngine: string;
 } {
   const lower = category.toLowerCase();
   if (lower.includes('video')) {
     return { type: 'video', label: 'VIDEO', defaultEngine: 'Runway Gen-3' };
-  }
-  if (lower.includes('animation') || lower.includes('motion')) {
-    return { type: 'animation', label: 'ANIMATION', defaultEngine: 'Luma Motion' };
   }
   if (lower.includes('image') || lower.includes('concept')) {
     return { type: 'image', label: 'IMAGE', defaultEngine: 'Flux.1 Dev' };
@@ -105,6 +102,17 @@ export const PromptCard: React.FC<PromptCardProps> = ({
   const displayAr = prompt.aspectRatio || (arMatch ? arMatch[1] : theme.type === 'video' ? '2.39:1' : '16:9');
   const displayEngine = prompt.engine || theme.defaultEngine;
 
+  const handleSnippetDoubleClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    const selection = window.getSelection();
+    if (selection) {
+      const range = document.createRange();
+      range.selectNodeContents(e.currentTarget);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+  };
+
   return (
     <article
       className={`prompt-card ${isSelected ? 'selected' : ''}`}
@@ -156,8 +164,8 @@ export const PromptCard: React.FC<PromptCardProps> = ({
           {/* Monospace Code Snippet Box */}
           <div
             className="card-snippet-box font-code-sm"
-            title="Click to select prompt text"
-            onClick={(e) => e.stopPropagation()}
+            title="Click to select card • Double-click to select text"
+            onDoubleClick={handleSnippetDoubleClick}
           >
             {prompt.body}
           </div>

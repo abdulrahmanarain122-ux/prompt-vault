@@ -12,7 +12,6 @@ interface PromptModalProps {
 const PRESET_CATEGORIES = [
   'Image prompt',
   'Video prompt',
-  'Animation prompt',
   'Other',
 ];
 
