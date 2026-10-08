@@ -1,5 +1,22 @@
-import React from 'react';
+import React, { useState } from 'react';
 import type { StorageStatus } from '../types/prompt';
+
+interface EngineItem {
+  id: string;
+  label: string;
+  query: string;
+  isCustom?: boolean;
+}
+
+const DEFAULT_ENGINES: EngineItem[] = [
+  { id: 'engine-midjourney', label: 'Midjourney v6', query: 'midjourney' },
+  { id: 'engine-runway', label: 'Runway Gen-3', query: 'runway' },
+  { id: 'engine-sora', label: 'Sora', query: 'sora' },
+  { id: 'engine-kling', label: 'Kling', query: 'kling' },
+  { id: 'engine-flux', label: 'Flux.1', query: 'flux' },
+];
+
+const ENGINES_STORAGE_KEY = 'prompt_vault_custom_engines_v1';
 
 interface SidebarProps {
   selectedCategory: string;
@@ -16,6 +33,7 @@ interface SidebarProps {
   onResetStarters: () => void;
   isMobileOpen: boolean;
   onCloseMobile: () => void;
+  onNotify?: (message: string, type?: 'success' | 'error') => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -32,14 +50,76 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onResetStarters,
   isMobileOpen,
   onCloseMobile,
+  onNotify,
 }) => {
-  const modelEngines = [
-    { id: 'engine-midjourney', label: 'Midjourney v6', query: 'midjourney' },
-    { id: 'engine-runway', label: 'Runway Gen-3', query: 'runway' },
-    { id: 'engine-sora', label: 'Sora', query: 'sora' },
-    { id: 'engine-kling', label: 'Kling', query: 'kling' },
-    { id: 'engine-flux', label: 'Flux.1', query: 'flux' },
+  const [customEngines, setCustomEngines] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem(ENGINES_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return [];
+  });
+
+  const [isAddingEngine, setIsAddingEngine] = useState(false);
+  const [newEngineName, setNewEngineName] = useState('');
+
+  const allEngines = [
+    ...DEFAULT_ENGINES,
+    ...customEngines.map((name) => ({
+      id: `custom-${name.toLowerCase().replace(/\s+/g, '-')}`,
+      label: name,
+      query: name.toLowerCase(),
+      isCustom: true,
+    })),
   ];
+
+  const handleAddEngineSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = newEngineName.trim();
+    if (!trimmed) {
+      setIsAddingEngine(false);
+      return;
+    }
+    const exists = allEngines.some(
+      (eng) => eng.label.toLowerCase() === trimmed.toLowerCase()
+    );
+    if (exists) {
+      onNotify?.(`Engine "${trimmed}" already exists.`);
+      setIsAddingEngine(false);
+      setNewEngineName('');
+      return;
+    }
+    const updated = [...customEngines, trimmed];
+    setCustomEngines(updated);
+    try {
+      localStorage.setItem(ENGINES_STORAGE_KEY, JSON.stringify(updated));
+    } catch (err) {
+      console.warn('Failed to save engine to storage:', err);
+    }
+    onNotify?.(`Added engine "${trimmed}"`, 'success');
+    setNewEngineName('');
+    setIsAddingEngine(false);
+  };
+
+  const handleRemoveCustomEngine = (e: React.MouseEvent, engineName: string) => {
+    e.stopPropagation();
+    const updated = customEngines.filter((n) => n !== engineName);
+    setCustomEngines(updated);
+    try {
+      localStorage.setItem(ENGINES_STORAGE_KEY, JSON.stringify(updated));
+    } catch (err) {
+      console.warn('Failed to save engine to storage:', err);
+    }
+    if (selectedFilter === engineName.toLowerCase()) {
+      onSelectFilter('');
+    }
+    onNotify?.(`Removed engine "${engineName}"`);
+  };
 
   const handleCategoryClick = (cat: string) => {
     onSelectFilter('');
@@ -164,21 +244,96 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </nav>
 
           {/* Section: Model Engines */}
-          <span className="sidebar-section-title">Model Engines</span>
+          <div className="sidebar-section-header">
+            <span className="sidebar-section-title">Model Engines</span>
+            <button
+              type="button"
+              className="btn-add-engine-icon"
+              onClick={() => setIsAddingEngine((prev) => !prev)}
+              title={isAddingEngine ? 'Close' : 'Add model engine'}
+              aria-label="Add model engine"
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: '15px' }}>
+                {isAddingEngine ? 'close' : 'add'}
+              </span>
+            </button>
+          </div>
+
           <div className="sidebar-nav-group" role="group" aria-label="Filter by AI model engine">
-            {modelEngines.map((engine) => (
-              <button
+            {allEngines.map((engine) => (
+              <div
                 key={engine.id}
-                type="button"
                 className={`sidebar-nav-item ${selectedFilter === engine.query ? 'active' : ''}`}
                 onClick={() => handleFilterClick(selectedFilter === engine.query ? '' : engine.query)}
+                role="button"
+                tabIndex={0}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    handleFilterClick(selectedFilter === engine.query ? '' : engine.query);
+                  }
+                }}
               >
                 <div className="sidebar-item-left">
                   <span className="engine-bullet" aria-hidden="true" />
                   <span className="font-code-sm">{engine.label}</span>
                 </div>
-              </button>
+                {engine.isCustom && (
+                  <button
+                    type="button"
+                    className="btn-remove-engine"
+                    onClick={(e) => handleRemoveCustomEngine(e, engine.label)}
+                    title={`Remove custom engine ${engine.label}`}
+                    aria-label={`Remove engine ${engine.label}`}
+                  >
+                    <span className="material-symbols-outlined" style={{ fontSize: '14px' }}>
+                      close
+                    </span>
+                  </button>
+                )}
+              </div>
             ))}
+
+            {/* Inline Add Engine Form or Button */}
+            {isAddingEngine ? (
+              <form onSubmit={handleAddEngineSubmit} className="sidebar-add-engine-form">
+                <input
+                  type="text"
+                  autoFocus
+                  placeholder="e.g. Luma, Ideogram..."
+                  value={newEngineName}
+                  onChange={(e) => setNewEngineName(e.target.value)}
+                  className="sidebar-add-engine-input"
+                  aria-label="New model engine name"
+                />
+                <div className="sidebar-add-engine-actions">
+                  <button type="submit" className="btn-engine-add-confirm">
+                    Add
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAddingEngine(false);
+                      setNewEngineName('');
+                    }}
+                    className="btn-engine-add-cancel"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <button
+                type="button"
+                className="sidebar-add-engine-btn"
+                onClick={() => setIsAddingEngine(true)}
+                title="Add custom model engine"
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: '15px' }}>
+                  add
+                </span>
+                <span>Add Model Engine</span>
+              </button>
+            )}
           </div>
         </div>
 

@@ -304,11 +304,6 @@ export const App: React.FC = () => {
     }
   };
 
-  const handleFocusSearch = () => {
-    const input = document.getElementById('workspace-search-input') as HTMLInputElement;
-    input?.focus();
-  };
-
   return (
     <div className="app-layout">
       {/* Fixed Top Header */}
@@ -316,9 +311,7 @@ export const App: React.FC = () => {
         storageStatus={storageStatus}
         totalPrompts={prompts.length}
         onNewPrompt={handleOpenNewPrompt}
-        onFocusSearch={handleFocusSearch}
         onToggleMobileSidebar={() => setIsMobileSidebarOpen((prev) => !prev)}
-        onResetStarters={handleRestoreStarters}
       />
 
       {/* Fixed Left Navigation Sidebar */}
@@ -337,29 +330,23 @@ export const App: React.FC = () => {
         onResetStarters={handleRestoreStarters}
         isMobileOpen={isMobileSidebarOpen}
         onCloseMobile={() => setIsMobileSidebarOpen(false)}
+        onNotify={addToast}
       />
 
       {/* Workspace Area */}
       <div className="workspace-pl">
         <main className="main-content">
-          {/* Workspace Context & Filter Ribbon */}
+          {/* Workspace Toolbar: Unified single bar with breathing space */}
           <WorkspaceToolbar
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
             selectedCategory={selectedCategory}
-            onSelectCategory={setSelectedCategory}
-            selectedEngineTag={selectedEngineTag}
-            onSelectEngineTag={setSelectedEngineTag}
-            selectedAspectRatio={selectedAspectRatio}
-            onSelectAspectRatio={setSelectedAspectRatio}
             sortBy={sortBy}
             onSortChange={setSortBy}
             viewMode={viewMode}
             onViewModeChange={setViewMode}
             totalFilteredCount={filteredPrompts.length}
             totalStoredCount={prompts.length}
-            onNewPrompt={handleOpenNewPrompt}
-            onBatchAction={handleRestoreStarters}
           />
 
           {/* Primary Workspace Content Body: Gallery + Inspector */}

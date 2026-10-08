@@ -114,47 +114,37 @@ export const PromptCard: React.FC<PromptCardProps> = ({
       {/* Cyan indicator bar on active selection */}
       {isSelected && <div className="card-selection-indicator" aria-hidden="true" />}
 
-      {/* Media Visual Header */}
-      <div className="card-media-header">
-        <div className={`card-media-art media-art-${theme.type}`}>
-          <div className="art-overlay-gradient" />
-          <div className="art-overlay-mesh" />
+      {/* Card Top Metadata Strip */}
+      <div className="card-top-bar">
+        <div className="badge-cluster-left">
+          <span className={`badge-category ${theme.type}`}>
+            {theme.label}
+          </span>
+          <span className="badge-model-tag">
+            {displayEngine}
+          </span>
+          <span className="card-id-text">{shortId}</span>
+        </div>
 
-          {/* Top Metadata Row */}
-          <div className="card-header-top-row">
-            <div className="badge-cluster-left">
-              <span className={`badge-category ${theme.type}`}>
-                {theme.label}
-              </span>
-              <span className="badge-model-tag">
-                {displayEngine}
-              </span>
-            </div>
-
-            <div className="badge-cluster-right">
-              <span className="badge-ar">{displayAr}</span>
-              <button
-                type="button"
-                className={`btn-star-card ${prompt.isFavorite ? 'active' : ''}`}
-                onClick={handleFavoriteClick}
-                title={prompt.isFavorite ? 'Remove from favorites' : 'Mark as favorite'}
-                aria-label="Toggle favorite"
-              >
-                <span
-                  className="material-symbols-outlined"
-                  style={{
-                    fontSize: '16px',
-                    fontVariationSettings: prompt.isFavorite ? "'FILL' 1" : "'FILL' 0",
-                  }}
-                >
-                  star
-                </span>
-              </button>
-            </div>
-          </div>
-
-          {/* Bottom Left ID Badge */}
-          <span className="card-header-id-badge">{shortId}</span>
+        <div className="badge-cluster-right">
+          <span className="badge-ar">{displayAr}</span>
+          <button
+            type="button"
+            className={`btn-star-card ${prompt.isFavorite ? 'active' : ''}`}
+            onClick={handleFavoriteClick}
+            title={prompt.isFavorite ? 'Remove from favorites' : 'Mark as favorite'}
+            aria-label="Toggle favorite"
+          >
+            <span
+              className="material-symbols-outlined"
+              style={{
+                fontSize: '16px',
+                fontVariationSettings: prompt.isFavorite ? "'FILL' 1" : "'FILL' 0",
+              }}
+            >
+              star
+            </span>
+          </button>
         </div>
       </div>
 

@@ -228,4 +228,86 @@ export const StorageService = {
     this.saveAll(STARTER_PROMPTS);
     return STARTER_PROMPTS;
   },
+
+  exportVault(): string {
+    const prompts = this.getAll();
+    const payload = {
+      version: '2.4',
+      appName: 'Prompt Vault Studio',
+      exportedAt: new Date().toISOString(),
+      promptCount: prompts.length,
+      prompts,
+    };
+    return JSON.stringify(payload, null, 2);
+  },
+
+  importVault(
+    jsonString: string,
+    mode: 'merge' | 'replace' = 'merge'
+  ): { added: number; updated: number; total: number } {
+    let parsed: any;
+    try {
+      parsed = JSON.parse(jsonString);
+    } catch {
+      throw new Error('Invalid JSON format. Please provide a valid Prompt Vault export file.');
+    }
+
+    const items: PromptItem[] = Array.isArray(parsed)
+      ? parsed
+      : Array.isArray(parsed.prompts)
+      ? parsed.prompts
+      : null;
+
+    if (!items || !Array.isArray(items)) {
+      throw new Error('No valid prompt records found in the import file.');
+    }
+
+    const validPrompts: PromptItem[] = [];
+    for (const item of items) {
+      if (item && typeof item === 'object' && item.title && item.body) {
+        validPrompts.push({
+          id: item.id || generateId(),
+          title: String(item.title).trim(),
+          category: item.category ? String(item.category).trim() : 'Other',
+          body: String(item.body).trim(),
+          createdAt: typeof item.createdAt === 'number' ? item.createdAt : Date.now(),
+          updatedAt: typeof item.updatedAt === 'number' ? item.updatedAt : Date.now(),
+          isFavorite: Boolean(item.isFavorite),
+          copyCount: typeof item.copyCount === 'number' ? item.copyCount : 0,
+          engine: item.engine ? String(item.engine) : undefined,
+          aspectRatio: item.aspectRatio ? String(item.aspectRatio) : undefined,
+          tags: Array.isArray(item.tags) ? item.tags.map(String) : undefined,
+          negativePrompt: item.negativePrompt ? String(item.negativePrompt) : undefined,
+        });
+      }
+    }
+
+    if (validPrompts.length === 0) {
+      throw new Error('No valid prompt records found to import.');
+    }
+
+    if (mode === 'replace') {
+      this.saveAll(validPrompts);
+      return { added: validPrompts.length, updated: 0, total: validPrompts.length };
+    }
+
+    const current = this.getAll();
+    const currentMap = new Map(current.map((p) => [p.id, p]));
+    let added = 0;
+    let updated = 0;
+
+    for (const vp of validPrompts) {
+      if (currentMap.has(vp.id)) {
+        currentMap.set(vp.id, vp);
+        updated++;
+      } else {
+        currentMap.set(vp.id, vp);
+        added++;
+      }
+    }
+
+    const mergedList = Array.from(currentMap.values());
+    this.saveAll(mergedList);
+    return { added, updated, total: mergedList.length };
+  },
 };
