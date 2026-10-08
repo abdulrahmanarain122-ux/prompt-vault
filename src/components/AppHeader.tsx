@@ -1,5 +1,6 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import type { StorageStatus } from '../types/prompt';
+import { useAuth } from '../context/AuthContext';
 
 interface AppHeaderProps {
   storageStatus: StorageStatus;
@@ -13,6 +14,23 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   onNewPrompt,
   onToggleMobileSidebar,
 }) => {
+  const { user, profile, openAuthModal, signOut } = useAuth();
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const displayName = profile?.display_name || user?.email?.split('@')[0] || 'Creator';
+  const handleTag = profile?.username ? `@${profile.username}` : user?.email || 'cloud active';
+
   return (
     <header className="fixed-header" role="banner">
       <div className="header-left-cluster">
@@ -61,25 +79,70 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
           <span>New Prompt</span>
         </button>
 
-        {/* Workspace Account / Environment Indicator */}
-        <div
-          className="header-workspace-user"
-          title="Local Workspace (Browser Storage)"
-        >
-          <div className="user-avatar-circle" aria-hidden="true">
-            <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>
-              desktop_windows
-            </span>
+        {/* Auth / Account Profile Controller */}
+        {user ? (
+          <div className="user-profile-menu" ref={dropdownRef}>
+            <div
+              className="header-workspace-user"
+              onClick={() => setDropdownOpen((prev) => !prev)}
+              style={{ cursor: 'pointer' }}
+              title="Account Menu"
+            >
+              <div className="user-avatar-circle" aria-hidden="true" style={{ backgroundColor: 'var(--primary-container)', color: '#002022', fontWeight: 600 }}>
+                {displayName.charAt(0).toUpperCase()}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'left', lineHeight: 1.1 }}>
+                <span className="font-label-sm" style={{ color: 'var(--on-surface)', fontWeight: 600 }}>
+                  {displayName}
+                </span>
+                <span className="font-code-sm" style={{ color: 'var(--primary)', fontSize: '10px' }}>
+                  {handleTag}
+                </span>
+              </div>
+              <span className="material-symbols-outlined" style={{ fontSize: '16px', color: 'var(--outline)', marginLeft: '4px' }}>
+                arrow_drop_down
+              </span>
+            </div>
+
+            {dropdownOpen && (
+              <div className="user-menu-dropdown">
+                <div className="user-menu-header">
+                  <span className="font-label-sm" style={{ color: 'var(--on-surface)', fontWeight: 600 }}>
+                    {user.email}
+                  </span>
+                  <span className="font-code-sm" style={{ color: 'var(--outline)' }}>
+                    Signed in to Cloud Vault
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="user-menu-item danger"
+                  onClick={async () => {
+                    setDropdownOpen(false);
+                    await signOut();
+                  }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>
+                    logout
+                  </span>
+                  <span>Sign Out</span>
+                </button>
+              </div>
+            )}
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'left', lineHeight: 1.1 }}>
-            <span className="font-label-sm" style={{ color: 'var(--on-surface)' }}>
-              Studio Arc
+        ) : (
+          <button
+            type="button"
+            className="btn-toolbar-new"
+            onClick={() => openAuthModal('login')}
+            style={{ backgroundColor: 'var(--surface-container-high)', color: 'var(--on-surface)', border: '1px solid var(--border-subtle)' }}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: '16px', color: 'var(--primary)' }}>
+              account_circle
             </span>
-            <span className="font-code-sm" style={{ color: 'var(--outline)' }}>
-              workspace
-            </span>
-          </div>
-        </div>
+            <span>Sign In</span>
+          </button>
+        )}
       </div>
     </header>
   );
