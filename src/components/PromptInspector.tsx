@@ -1,11 +1,14 @@
 import React from 'react';
-import type { PromptItem } from '../types/prompt';
+import type { PromptItem, CollectionItem } from '../types/prompt';
+import { copyPromptToClipboard } from '../utils/promptCopy';
 
 interface PromptInspectorProps {
   selectedPrompt: PromptItem | null;
   onAppendToken?: (token: string) => void;
   onToggleVisibility?: (prompt: PromptItem) => void;
   onNotify: (message: string, type?: 'success' | 'error') => void;
+  collections?: CollectionItem[];
+  onToggleCollectionMembership?: (promptId: string, collectionId: string) => void;
 }
 
 export const PromptInspector: React.FC<PromptInspectorProps> = ({
@@ -13,6 +16,8 @@ export const PromptInspector: React.FC<PromptInspectorProps> = ({
   onAppendToken,
   onToggleVisibility,
   onNotify,
+  collections = [],
+  onToggleCollectionMembership,
 }) => {
   const quickTokens = [
     '+ --ar 16:9',
@@ -142,6 +147,29 @@ export const PromptInspector: React.FC<PromptInspectorProps> = ({
             </div>
           )}
 
+          {selectedPrompt && (
+            <div style={{ paddingTop: '4px' }}>
+              <button
+                type="button"
+                className="btn-card-copy"
+                style={{ width: '100%', justifyContent: 'center' }}
+                onClick={async () => {
+                  try {
+                    await copyPromptToClipboard(selectedPrompt);
+                    onNotify(`Copied "${selectedPrompt.title}" to clipboard!`, 'success');
+                  } catch {
+                    onNotify('Could not copy to clipboard. Please select manually.', 'error');
+                  }
+                }}
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: '15px' }}>
+                  content_copy
+                </span>
+                <span>Copy Full Prompt</span>
+              </button>
+            </div>
+          )}
+
           {selectedPrompt?.authorUsername && (
             <div className="inspector-param-row">
               <span style={{ color: 'var(--outline)' }}>Creator</span>
@@ -168,6 +196,58 @@ export const PromptInspector: React.FC<PromptInspectorProps> = ({
           )}
         </div>
       </div>
+
+      {/* Custom Collections Membership Bento */}
+      {selectedPrompt && collections && collections.length > 0 && (
+        <div className="inspector-bento-card" aria-label="Prompt collections membership">
+          <div className="inspector-bento-header">
+            <span className="font-label-sm uppercase tracking-wider" style={{ color: 'var(--outline)' }}>
+              Collections Membership
+            </span>
+            <span className="font-code-sm" style={{ color: 'var(--primary)' }}>
+              {(selectedPrompt.collectionIds || []).length} assigned
+            </span>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', paddingTop: '6px' }}>
+            {collections.map((col) => {
+              const isMember = Boolean(selectedPrompt.collectionIds?.includes(col.id));
+              return (
+                <button
+                  key={col.id}
+                  type="button"
+                  onClick={() => onToggleCollectionMembership?.(selectedPrompt.id, col.id)}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '6px 10px',
+                    borderRadius: '8px',
+                    backgroundColor: isMember ? 'rgba(0, 240, 255, 0.12)' : 'rgba(255, 255, 255, 0.03)',
+                    border: isMember ? '1px solid var(--primary-container)' : '1px solid var(--border-subtle)',
+                    color: isMember ? 'var(--primary-container)' : 'var(--on-surface-variant)',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s ease',
+                  }}
+                  aria-pressed={isMember}
+                  aria-label={`${isMember ? 'Remove from' : 'Add to'} collection ${col.name}`}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>
+                      {col.visibility === 'public' ? 'folder_shared' : 'folder'}
+                    </span>
+                    <span className="font-body-sm" style={{ fontWeight: isMember ? 600 : 400 }}>
+                      {col.name}
+                    </span>
+                  </div>
+                  <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>
+                    {isMember ? 'check_circle' : 'add_circle'}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Quick Reference Prompt Expander Utility */}
       <div className="inspector-bento-card">

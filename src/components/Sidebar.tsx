@@ -1,6 +1,5 @@
-/* eslint-disable react-refresh/only-export-components */
 import React, { useState } from 'react';
-import type { StorageStatus } from '../types/prompt';
+import type { StorageStatus, CollectionItem } from '../types/prompt';
 
 export const DEFAULT_ENGINE_LABELS = [
   'Midjourney v6',
@@ -25,6 +24,7 @@ interface SidebarProps {
   exploreCount?: number;
   imageCount: number;
   videoCount: number;
+  animationCount?: number;
   otherCount: number;
   favoritesCount: number;
   storageStatus: StorageStatus;
@@ -33,6 +33,11 @@ interface SidebarProps {
   onCloseMobile: () => void;
   onEnginesChange?: (engines: string[]) => void;
   onNotify?: (message: string, type?: 'success' | 'error') => void;
+  collections?: CollectionItem[];
+  selectedCollectionId?: string | null;
+  onSelectCollection?: (collectionId: string | null) => void;
+  onCreateCollection?: (name: string) => Promise<boolean> | boolean;
+  collectionCounts?: Record<string, number>;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({
@@ -46,6 +51,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   exploreCount = 0,
   imageCount,
   videoCount,
+  animationCount = 0,
   otherCount,
   storageStatus,
   onResetStarters,
@@ -53,7 +59,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onCloseMobile,
   onEnginesChange,
   onNotify,
+  collections = [],
+  selectedCollectionId = null,
+  onSelectCollection,
+  onCreateCollection,
+  collectionCounts = {},
 }) => {
+  const [isAddingCollection, setIsAddingCollection] = useState(false);
+  const [newCollectionName, setNewCollectionName] = useState('');
+  const [isSubmittingCollection, setIsSubmittingCollection] = useState(false);
+  const [collectionError, setCollectionError] = useState<string | null>(null);
   const [engines, setEngines] = useState<string[]>(() => {
     try {
       const saved = localStorage.getItem(ENGINES_STORAGE_KEY);
@@ -144,6 +159,42 @@ export const Sidebar: React.FC<SidebarProps> = ({
     onNotify?.('Restored default model engines.', 'success');
   };
 
+  const handleCreateCollectionSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = newCollectionName.trim();
+    if (!trimmed) {
+      setCollectionError('Collection name cannot be blank.');
+      return;
+    }
+    if (trimmed.length > 100) {
+      setCollectionError('Collection name must be 100 characters or fewer.');
+      return;
+    }
+    if (collections.some((c) => c.name.toLowerCase() === trimmed.toLowerCase())) {
+      setCollectionError(`A collection named "${trimmed}" already exists.`);
+      return;
+    }
+
+    try {
+      setIsSubmittingCollection(true);
+      setCollectionError(null);
+      if (onCreateCollection) {
+        const success = await onCreateCollection(trimmed);
+        if (success !== false) {
+          setNewCollectionName('');
+          setIsAddingCollection(false);
+          onNotify?.(`Created collection "${trimmed}"`, 'success');
+        }
+      }
+    } catch (err) {
+      // Preserve entered collection name on recoverable failures
+      setCollectionError(err instanceof Error ? err.message : 'Failed to create collection.');
+      onNotify?.(err instanceof Error ? err.message : 'Failed to create collection.', 'error');
+    } finally {
+      setIsSubmittingCollection(false);
+    }
+  };
+
   const handleCategoryClick = (cat: string) => {
     onSelectFilter('');
     onSelectCategory(cat);
@@ -216,14 +267,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
           </nav>
 
-          {/* Section: Collections / Categories */}
-          <span className="sidebar-section-title">Collections</span>
+          {/* Section: Categories */}
+          <span className="sidebar-section-title">Categories</span>
           <nav className="sidebar-nav-group" aria-label="Prompt categories">
             {/* All Prompts */}
             <button
               type="button"
-              className={`sidebar-nav-item ${selectedCategory === 'All' && !selectedFilter ? 'active' : ''}`}
-              onClick={() => handleCategoryClick('All')}
+              className={`sidebar-nav-item ${selectedCategory === 'All' && !selectedFilter && !selectedCollectionId ? 'active' : ''}`}
+              onClick={() => {
+                onSelectCollection?.(null);
+                handleCategoryClick('All');
+              }}
             >
               <div className="sidebar-item-left">
                 <span className="material-symbols-outlined">view_list</span>
@@ -235,8 +289,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {/* Image */}
             <button
               type="button"
-              className={`sidebar-nav-item ${selectedCategory.toLowerCase().includes('image') && !selectedFilter ? 'active' : ''}`}
-              onClick={() => handleCategoryClick('Image prompt')}
+              className={`sidebar-nav-item ${selectedCategory.toLowerCase().includes('image') && !selectedFilter && !selectedCollectionId ? 'active' : ''}`}
+              onClick={() => {
+                onSelectCollection?.(null);
+                handleCategoryClick('Image prompt');
+              }}
             >
               <div className="sidebar-item-left">
                 <span className="material-symbols-outlined">image</span>
@@ -248,8 +305,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {/* Video */}
             <button
               type="button"
-              className={`sidebar-nav-item ${selectedCategory.toLowerCase().includes('video') && !selectedFilter ? 'active' : ''}`}
-              onClick={() => handleCategoryClick('Video prompt')}
+              className={`sidebar-nav-item ${selectedCategory.toLowerCase().includes('video') && !selectedFilter && !selectedCollectionId ? 'active' : ''}`}
+              onClick={() => {
+                onSelectCollection?.(null);
+                handleCategoryClick('Video prompt');
+              }}
             >
               <div className="sidebar-item-left">
                 <span className="material-symbols-outlined">movie</span>
@@ -258,12 +318,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <span className="sidebar-item-count">{videoCount}</span>
             </button>
 
+            {/* Animation */}
+            <button
+              type="button"
+              className={`sidebar-nav-item ${selectedCategory.toLowerCase().includes('animation') && !selectedFilter && !selectedCollectionId ? 'active' : ''}`}
+              onClick={() => {
+                onSelectCollection?.(null);
+                handleCategoryClick('Animation');
+              }}
+            >
+              <div className="sidebar-item-left">
+                <span className="material-symbols-outlined">animation</span>
+                <span className="font-body-sm">Animation</span>
+              </div>
+              <span className="sidebar-item-count">{animationCount}</span>
+            </button>
 
             {/* Other */}
             <button
               type="button"
-              className={`sidebar-nav-item ${selectedCategory.toLowerCase().includes('other') && !selectedFilter ? 'active' : ''}`}
-              onClick={() => handleCategoryClick('Other')}
+              className={`sidebar-nav-item ${selectedCategory.toLowerCase().includes('other') && !selectedFilter && !selectedCollectionId ? 'active' : ''}`}
+              onClick={() => {
+                onSelectCollection?.(null);
+                handleCategoryClick('Other');
+              }}
             >
               <div className="sidebar-item-left">
                 <span className="material-symbols-outlined">category</span>
@@ -272,6 +350,136 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <span className="sidebar-item-count">{otherCount}</span>
             </button>
           </nav>
+
+          {/* Section: Custom Collections */}
+          <div className="sidebar-section-header">
+            <span className="sidebar-section-title">Collections</span>
+            <button
+              type="button"
+              className="btn-add-engine-icon"
+              onClick={() => {
+                setIsAddingCollection((prev) => !prev);
+                setCollectionError(null);
+              }}
+              title={isAddingCollection ? 'Close collection form' : 'New collection'}
+              aria-label="New collection"
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: '15px' }}>
+                {isAddingCollection ? 'close' : 'add'}
+              </span>
+            </button>
+          </div>
+
+          <div className="sidebar-nav-group" role="group" aria-label="Custom collections">
+            {collections.length === 0 && !isAddingCollection && (
+              <div style={{ padding: '6px 12px', color: 'var(--outline)', fontSize: '12px', fontStyle: 'italic' }}>
+                No custom collections yet.
+              </div>
+            )}
+
+            {collections.map((col) => {
+              const isSelected = selectedCollectionId === col.id;
+              const count = collectionCounts[col.id] ?? 0;
+              return (
+                <button
+                  key={col.id}
+                  type="button"
+                  className={`sidebar-nav-item ${isSelected ? 'active' : ''}`}
+                  onClick={() => {
+                    onSelectCollection?.(isSelected ? null : col.id);
+                    onCloseMobile();
+                  }}
+                  aria-label={`Collection ${col.name}, ${count} prompts`}
+                >
+                  <div className="sidebar-item-left">
+                    <span
+                      className="material-symbols-outlined"
+                      style={{
+                        fontSize: '18px',
+                        color: isSelected ? 'var(--primary-container)' : undefined,
+                      }}
+                    >
+                      {col.visibility === 'public' ? 'folder_shared' : 'folder'}
+                    </span>
+                    <span
+                      className="font-body-sm"
+                      style={{
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        maxWidth: '130px',
+                        fontWeight: isSelected ? 600 : 400,
+                      }}
+                      title={col.name}
+                    >
+                      {col.name}
+                    </span>
+                  </div>
+                  <span className="sidebar-item-count">{count}</span>
+                </button>
+              );
+            })}
+
+            {isAddingCollection ? (
+              <form onSubmit={handleCreateCollectionSubmit} className="sidebar-add-engine-form" aria-label="Create collection form">
+                <input
+                  type="text"
+                  autoFocus
+                  placeholder="Collection name..."
+                  value={newCollectionName}
+                  onChange={(e) => {
+                    setNewCollectionName(e.target.value);
+                    if (collectionError) setCollectionError(null);
+                  }}
+                  maxLength={100}
+                  className="sidebar-add-engine-input"
+                  aria-label="New collection name"
+                  disabled={isSubmittingCollection}
+                />
+                {collectionError && (
+                  <div style={{ color: 'var(--error, #ffb4ab)', fontSize: '11px', padding: '2px 4px' }} role="alert">
+                    {collectionError}
+                  </div>
+                )}
+                <div className="sidebar-add-engine-actions">
+                  <button
+                    type="submit"
+                    className="btn-engine-add-confirm"
+                    disabled={isSubmittingCollection || !newCollectionName.trim()}
+                  >
+                    {isSubmittingCollection ? 'Creating...' : 'Create'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAddingCollection(false);
+                      setCollectionError(null);
+                    }}
+                    className="btn-engine-add-cancel"
+                    disabled={isSubmittingCollection}
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <button
+                type="button"
+                className="sidebar-add-engine-btn"
+                onClick={() => {
+                  setIsAddingCollection(true);
+                  setCollectionError(null);
+                }}
+                title="New collection"
+                aria-label="New collection"
+              >
+                <span className="material-symbols-outlined" style={{ fontSize: '15px' }}>
+                  add
+                </span>
+                <span>New collection</span>
+              </button>
+            )}
+          </div>
 
           {/* Section: Quick Access */}
           <span className="sidebar-section-title">Quick Access</span>

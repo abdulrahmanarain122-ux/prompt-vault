@@ -1,8 +1,20 @@
 export type PromptCategory =
   | 'Image prompt'
   | 'Video prompt'
+  | 'Animation'
   | 'Other'
   | string;
+
+export interface CollectionItem {
+  id: string;
+  name: string;
+  description?: string;
+  visibility: 'private' | 'public';
+  userId?: string;
+  createdAt: number;
+  updatedAt: number;
+  promptCount?: number;
+}
 
 export interface PromptItem {
   id: string;
@@ -17,6 +29,7 @@ export interface PromptItem {
   aspectRatio?: string;
   tags?: string[];
   negativePrompt?: string;
+  collectionIds?: string[];
   // Cloud Sharing & Visibility (Phase 3+)
   visibility?: 'public' | 'private';
   userId?: string;
@@ -34,6 +47,7 @@ export type PromptFormInput = {
   aspectRatio?: string;
   tags?: string[];
   negativePrompt?: string;
+  collectionIds?: string[];
   visibility?: 'public' | 'private';
 };
 

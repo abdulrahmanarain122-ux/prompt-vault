@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import type { PromptItem } from '../types/prompt';
+import { copyPromptToClipboard } from '../utils/promptCopy';
 
 interface PromptCardProps {
   prompt: PromptItem;
@@ -69,19 +70,7 @@ export const PromptCard: React.FC<PromptCardProps> = ({
   const handleCopy = async (e: React.MouseEvent) => {
     e.stopPropagation();
     try {
-      if (navigator.clipboard && navigator.clipboard.writeText) {
-        await navigator.clipboard.writeText(prompt.body);
-      } else {
-        const textarea = document.createElement('textarea');
-        textarea.value = prompt.body;
-        textarea.style.position = 'fixed';
-        textarea.style.opacity = '0';
-        document.body.appendChild(textarea);
-        textarea.focus();
-        textarea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textarea);
-      }
+      await copyPromptToClipboard(prompt);
       setCopied(true);
       onCopySuccess?.(prompt);
       onNotify(`Copied "${prompt.title}" to clipboard!`, 'success');

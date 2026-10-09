@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import type { PromptItem, PromptFormInput } from '../types/prompt';
+import type { PromptItem, PromptFormInput, CollectionItem } from '../types/prompt';
 
 interface PromptEditorDrawerProps {
   isOpen: boolean;
@@ -9,9 +9,10 @@ interface PromptEditorDrawerProps {
   initialPrompt?: PromptItem | null;
   availableCategories: string[];
   availableEngines?: string[];
+  availableCollections?: CollectionItem[];
 }
 
-const PRESET_CATEGORIES = ['Image', 'Video', 'Other'];
+const PRESET_CATEGORIES = ['Image', 'Video', 'Animation', 'Other'];
 
 const PRESET_ENGINES = [
   'Runway Gen-3',
@@ -37,6 +38,7 @@ export const PromptEditorDrawer: React.FC<PromptEditorDrawerProps> = ({
   onDeleteRequest,
   initialPrompt,
   availableEngines,
+  availableCollections = [],
 }) => {
   const engineOptions = availableEngines && availableEngines.length > 0 ? availableEngines : PRESET_ENGINES;
   const [title, setTitle] = useState('');
@@ -48,6 +50,7 @@ export const PromptEditorDrawer: React.FC<PromptEditorDrawerProps> = ({
   const [tags, setTags] = useState<string[]>([]);
   const [tagInput, setTagInput] = useState('');
   const [visibility, setVisibility] = useState<'public' | 'private'>('private');
+  const [selectedCollectionIds, setSelectedCollectionIds] = useState<string[]>([]);
   const [errors, setErrors] = useState<{ title?: string; body?: string }>({});
 
   const titleInputRef = useRef<HTMLInputElement>(null);
@@ -60,6 +63,7 @@ export const PromptEditorDrawer: React.FC<PromptEditorDrawerProps> = ({
         setTitle(initialPrompt.title);
         setBody(initialPrompt.body);
         setVisibility(initialPrompt.visibility || 'private');
+        setSelectedCollectionIds(initialPrompt.collectionIds || []);
 
         // Normalize category
         const catMatch = PRESET_CATEGORIES.find((c) =>
@@ -85,6 +89,7 @@ export const PromptEditorDrawer: React.FC<PromptEditorDrawerProps> = ({
         setNegativePrompt('');
         setTags([]);
         setVisibility('private');
+        setSelectedCollectionIds([]);
       }
       setTagInput('');
       setErrors({});
@@ -95,12 +100,11 @@ export const PromptEditorDrawer: React.FC<PromptEditorDrawerProps> = ({
   const handleSave = React.useCallback(() => {
     const newErrors: { title?: string; body?: string } = {};
     const trimmedTitle = title.trim();
-    const trimmedBody = body.trim();
 
     if (!trimmedTitle) {
       newErrors.title = 'Prompt title is required.';
     }
-    if (!trimmedBody) {
+    if (!body || body.length === 0) {
       newErrors.body = 'Prompt instructions cannot be empty.';
     }
 
@@ -111,23 +115,25 @@ export const PromptEditorDrawer: React.FC<PromptEditorDrawerProps> = ({
 
     // Extract raw AR string (e.g. "16:9" from "16:9 (Widescreen Landscape)")
     const arCode = aspectRatio.split(' ')[0];
+    const finalCategory = category === 'Other' ? 'Other' : category.includes('prompt') ? category : `${category} prompt`;
 
     onSubmit(
       {
         title: trimmedTitle,
-        category: `${category} prompt`,
-        body: trimmedBody,
+        category: finalCategory,
+        body: body, // Canonical text preserved untouched
         engine,
         aspectRatio: arCode,
-        negativePrompt: negativePrompt.trim(),
+        negativePrompt: negativePrompt !== '' ? negativePrompt : undefined, // Preserved untouched
         tags,
         visibility,
+        collectionIds: selectedCollectionIds,
       },
       initialPrompt ? initialPrompt.id : undefined
     );
 
     onClose();
-  }, [title, body, category, engine, aspectRatio, negativePrompt, tags, visibility, initialPrompt, onSubmit, onClose]);
+  }, [title, body, category, engine, aspectRatio, negativePrompt, tags, visibility, selectedCollectionIds, initialPrompt, onSubmit, onClose]);
 
   // Keyboard shortcut: Escape to close, Ctrl+S / Cmd+S to save
   useEffect(() => {
@@ -285,6 +291,52 @@ export const PromptEditorDrawer: React.FC<PromptEditorDrawerProps> = ({
               ))}
             </div>
           </div>
+
+          {/* Custom Collections Selector */}
+          {availableCollections && availableCollections.length > 0 && (
+            <div className="drawer-field-group">
+              <label className="drawer-label">
+                <span>Collections</span>
+                <span className="font-code-sm" style={{ color: 'var(--outline)' }}>
+                  Optional custom grouping
+                </span>
+              </label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px', paddingTop: '4px' }}>
+                {availableCollections.map((col) => {
+                  const isChecked = selectedCollectionIds.includes(col.id);
+                  return (
+                    <button
+                      key={col.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedCollectionIds((prev) =>
+                          isChecked ? prev.filter((id) => id !== col.id) : [...prev, col.id]
+                        );
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        padding: '6px 12px',
+                        borderRadius: '20px',
+                        border: isChecked ? '1px solid var(--primary-container)' : '1px solid var(--border-subtle)',
+                        backgroundColor: isChecked ? 'rgba(0, 240, 255, 0.15)' : 'rgba(255, 255, 255, 0.04)',
+                        color: isChecked ? 'var(--primary-container)' : 'var(--on-surface-variant)',
+                        fontSize: '13px',
+                        cursor: 'pointer',
+                      }}
+                      aria-pressed={isChecked}
+                    >
+                      <span className="material-symbols-outlined" style={{ fontSize: '15px' }}>
+                        {isChecked ? 'check' : 'add'}
+                      </span>
+                      <span>{col.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {/* Dual Dropdowns: Target Engine & Aspect Ratio */}
           <div className="drawer-dual-grid">

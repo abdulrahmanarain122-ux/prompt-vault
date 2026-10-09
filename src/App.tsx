@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import type { PromptItem, PromptFormInput, StorageStatus } from './types/prompt';
+import type { PromptItem, PromptFormInput, StorageStatus, CollectionItem } from './types/prompt';
 import { StorageService } from './services/storageService';
 import { AppHeader } from './components/AppHeader';
 import { Sidebar } from './components/Sidebar';
@@ -20,6 +20,8 @@ const AppContent: React.FC = () => {
   const [activeViewMode, setActiveViewMode] = useState<ActiveViewMode>('vault');
   const [publicPrompts, setPublicPrompts] = useState<PromptItem[]>([]);
   const [prompts, setPrompts] = useState<PromptItem[]>([]);
+  const [collections, setCollections] = useState<CollectionItem[]>([]);
+  const [selectedCollectionId, setSelectedCollectionId] = useState<string | null>(null);
   const [storageStatus, setStorageStatus] = useState<StorageStatus>({
     isAvailable: true,
     totalPrompts: 0,
@@ -81,6 +83,8 @@ const AppContent: React.FC = () => {
       if (loaded.length > 0) {
         setSelectedPromptId(loaded[0].id);
       }
+      const loadedCols = StorageService.getCollections(user?.id);
+      setCollections(loadedCols);
       refreshStorage();
     } catch (err) {
       console.error('Initialization error:', err);
@@ -112,7 +116,28 @@ const AppContent: React.FC = () => {
         }
       });
     }
-  }, [refreshStorage, addToast]);
+  }, [refreshStorage, addToast, user]);
+
+  // Keep collections in sync with user state
+  useEffect(() => {
+    try {
+      const localCols = StorageService.getCollections(user?.id);
+      setCollections(localCols);
+    } catch {
+      // ignore
+    }
+    if (user?.id && isValidUUID(user.id)) {
+      CloudPromptService.fetchCollections(user.id).then(({ data, error }) => {
+        if (!error && data && data.length > 0) {
+          setCollections((prev) => {
+            const map = new Map(prev.map((c) => [c.id, c]));
+            data.forEach((c) => map.set(c.id, c));
+            return Array.from(map.values());
+          });
+        }
+      });
+    }
+  }, [user]);
 
   // Global keyboard shortcuts (Alt+N or Ctrl+N to open new prompt)
   useEffect(() => {
@@ -134,6 +159,7 @@ const AppContent: React.FC = () => {
   const categoryCounts = useMemo(() => {
     let image = 0;
     let video = 0;
+    let animation = 0;
     let other = 0;
     let favorites = 0;
 
@@ -144,17 +170,35 @@ const AppContent: React.FC = () => {
       const lower = p.category.toLowerCase();
       if (lower.includes('image')) image++;
       else if (lower.includes('video')) video++;
+      else if (lower.includes('animation')) animation++;
       else other++;
     }
 
     return {
       image,
       video,
+      animation,
       other,
       favorites,
       total: source.length,
     };
   }, [prompts, publicPrompts, activeViewMode]);
+
+  // Accessible collection counts
+  const collectionCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    const source = activeViewMode === 'explore' ? publicPrompts : prompts;
+    for (const col of collections) {
+      const count = source.filter((p) => {
+        if (!p.collectionIds || !p.collectionIds.includes(col.id)) return false;
+        if (p.visibility === 'public') return true;
+        if (user?.id && p.userId === user.id) return true;
+        return false;
+      }).length;
+      counts[col.id] = count;
+    }
+    return counts;
+  }, [collections, prompts, publicPrompts, activeViewMode, user]);
 
   const availableCategoryNames = useMemo(() => {
     const source = activeViewMode === 'explore' ? publicPrompts : prompts;
@@ -165,6 +209,13 @@ const AppContent: React.FC = () => {
   // Filtered & sorted prompts
   const filteredPrompts = useMemo(() => {
     let result = activeViewMode === 'explore' ? [...publicPrompts] : [...prompts];
+
+    // Custom Collection Filter
+    if (selectedCollectionId) {
+      result = result.filter(
+        (p) => p.collectionIds && p.collectionIds.includes(selectedCollectionId)
+      );
+    }
 
     // Quick Access Filter (favorites or recent)
     if (selectedFilter === 'favorites') {
@@ -184,12 +235,13 @@ const AppContent: React.FC = () => {
     }
 
     // Category filter
-    if (selectedCategory !== 'All' && !selectedFilter) {
+    if (selectedCategory !== 'All' && !selectedFilter && !selectedCollectionId) {
       const targetCat = selectedCategory.trim().toLowerCase();
       result = result.filter((p) => {
         const itemCat = p.category.trim().toLowerCase();
         if (targetCat.includes('image')) return itemCat.includes('image');
         if (targetCat.includes('video')) return itemCat.includes('video');
+        if (targetCat.includes('animation')) return itemCat.includes('animation');
         return itemCat === targetCat;
       });
     }
@@ -240,7 +292,7 @@ const AppContent: React.FC = () => {
     }
 
     return result;
-  }, [prompts, publicPrompts, activeViewMode, selectedCategory, selectedFilter, selectedEngineTag, selectedAspectRatio, searchQuery, sortBy]);
+  }, [prompts, publicPrompts, activeViewMode, selectedCategory, selectedFilter, selectedEngineTag, selectedAspectRatio, searchQuery, sortBy, selectedCollectionId]);
 
   // Selected prompt for inspector
   const activePrompt = useMemo(() => {
@@ -326,6 +378,63 @@ const AppContent: React.FC = () => {
       addToast(err instanceof Error ? err.message : 'Could not save prompt', 'error');
     }
   };
+
+  const handleCreateCollection = useCallback(async (name: string): Promise<boolean> => {
+    if (!user) {
+      addToast('Signed-out visitors cannot create collections. Please sign in.', 'error');
+      throw new Error('Signed-out visitors cannot create collections. Please sign in.');
+    }
+
+    const created = StorageService.createCollection({
+      name,
+      userId: user.id,
+      visibility: 'private',
+    });
+    setCollections((prev) => [created, ...prev]);
+
+    if (isValidUUID(user.id)) {
+      CloudPromptService.createCloudCollection(name, user.id, 'private').catch((err) => {
+        console.warn('Cloud collection sync warning:', err);
+      });
+    }
+
+    addToast(`Collection "${created.name}" created!`, 'success');
+    return true;
+  }, [user, addToast]);
+
+  const handleToggleCollectionMembership = useCallback((promptId: string, collectionId: string) => {
+    if (!user) {
+      addToast('Please sign in to manage collections.', 'error');
+      return;
+    }
+
+    try {
+      const targetPrompt = prompts.find((p) => p.id === promptId);
+      if (!targetPrompt) return;
+
+      const isMember = Boolean(targetPrompt.collectionIds?.includes(collectionId));
+      let updatedPrompt: PromptItem;
+      if (isMember) {
+        updatedPrompt = StorageService.removePromptFromCollection(promptId, collectionId, user.id);
+        addToast('Removed from collection', 'success');
+      } else {
+        updatedPrompt = StorageService.addPromptToCollection(promptId, collectionId, user.id);
+        addToast('Added to collection', 'success');
+      }
+
+      setPrompts((prev) => prev.map((p) => (p.id === promptId ? updatedPrompt : p)));
+
+      if (isValidUUID(collectionId) && isValidUUID(promptId)) {
+        if (isMember) {
+          CloudPromptService.removePromptFromCloudCollection(collectionId, promptId);
+        } else {
+          CloudPromptService.addPromptToCloudCollection(collectionId, promptId);
+        }
+      }
+    } catch (err) {
+      addToast(err instanceof Error ? err.message : 'Failed to update collection membership', 'error');
+    }
+  }, [user, prompts, addToast]);
 
   const handleForkPrompt = async (prompt: PromptItem) => {
     if (!user) return;
@@ -463,6 +572,7 @@ const AppContent: React.FC = () => {
         exploreCount={publicPrompts.length}
         imageCount={categoryCounts.image}
         videoCount={categoryCounts.video}
+        animationCount={categoryCounts.animation}
         otherCount={categoryCounts.other}
         favoritesCount={categoryCounts.favorites}
         storageStatus={storageStatus}
@@ -471,6 +581,11 @@ const AppContent: React.FC = () => {
         onCloseMobile={() => setIsMobileSidebarOpen(false)}
         onEnginesChange={handleEnginesChange}
         onNotify={addToast}
+        collections={collections}
+        selectedCollectionId={selectedCollectionId}
+        onSelectCollection={setSelectedCollectionId}
+        onCreateCollection={handleCreateCollection}
+        collectionCounts={collectionCounts}
       />
 
       {/* Workspace Area */}
@@ -550,6 +665,20 @@ const AppContent: React.FC = () => {
 
                 <button
                   type="button"
+                  className={`explore-category-pill ${selectedCategory.toLowerCase().includes('animation') && !selectedFilter ? 'active' : ''}`}
+                  onClick={() => {
+                    setSelectedCategory('Animation');
+                    setSelectedFilter('');
+                  }}
+                  title="Filter to Animation prompts"
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>animation</span>
+                  <span>Animation Prompts</span>
+                  <span className="category-pill-count">{categoryCounts.animation}</span>
+                </button>
+
+                <button
+                  type="button"
                   className={`explore-category-pill ${selectedCategory.toLowerCase().includes('other') && !selectedFilter ? 'active' : ''}`}
                   onClick={() => {
                     setSelectedCategory('Other');
@@ -562,6 +691,40 @@ const AppContent: React.FC = () => {
                   <span className="category-pill-count">{categoryCounts.other}</span>
                 </button>
               </div>
+            </div>
+          )}
+
+          {/* Active Collection Filter Banner */}
+          {selectedCollectionId && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '10px 16px',
+                margin: '0 24px 16px',
+                backgroundColor: 'rgba(0, 240, 255, 0.08)',
+                border: '1px solid rgba(0, 240, 255, 0.25)',
+                borderRadius: '8px',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span className="material-symbols-outlined" style={{ color: 'var(--primary-container)', fontSize: '20px' }}>
+                  folder_open
+                </span>
+                <span className="font-body-sm" style={{ color: 'var(--on-surface)' }}>
+                  Viewing Collection: <strong>{collections.find((c) => c.id === selectedCollectionId)?.name || 'Custom Collection'}</strong> ({filteredPrompts.length} prompts)
+                </span>
+              </div>
+              <button
+                type="button"
+                className="btn-engine-add-cancel"
+                onClick={() => setSelectedCollectionId(null)}
+                style={{ padding: '4px 10px', fontSize: '12px' }}
+                aria-label="Exit collection view"
+              >
+                Show All Prompts
+              </button>
             </div>
           )}
 
@@ -705,6 +868,8 @@ const AppContent: React.FC = () => {
                 selectedPrompt={activePrompt}
                 onToggleVisibility={handleToggleVisibility}
                 onNotify={addToast}
+                collections={collections}
+                onToggleCollectionMembership={handleToggleCollectionMembership}
               />
             )}
           </div>
@@ -727,6 +892,7 @@ const AppContent: React.FC = () => {
         initialPrompt={editingPrompt}
         availableCategories={availableCategoryNames}
         availableEngines={availableEngines}
+        availableCollections={collections}
       />
 
       {/* Destructive Deletion Confirmation Modal */}

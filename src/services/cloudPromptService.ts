@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient';
-import type { PromptItem, PromptFormInput } from '../types/prompt';
+import type { PromptItem, PromptFormInput, CollectionItem } from '../types/prompt';
 
 export interface SupabasePromptRow {
   id: string;
@@ -391,6 +391,125 @@ export const CloudPromptService = {
         syncedCount: 0,
         error: err instanceof Error ? err.message : 'Failed to sync local storage to cloud.',
       };
+    }
+  },
+
+  /**
+   * Fetch collections from Supabase
+   */
+  async fetchCollections(userId?: string): Promise<{ data: CollectionItem[]; error: string | null }> {
+    try {
+      let query = supabase.from('collections').select('*');
+      if (userId && isValidUUID(userId)) {
+        query = query.or(`visibility.eq.public,user_id.eq.${userId}`);
+      } else {
+        query = query.eq('visibility', 'public');
+      }
+      const { data, error } = await query.order('created_at', { ascending: false });
+      if (error) return { data: [], error: error.message };
+
+      const mapped: CollectionItem[] = ((data as any[]) || []).map((row) => ({
+        id: row.id,
+        name: row.name,
+        description: row.description || undefined,
+        visibility: row.visibility,
+        userId: row.user_id,
+        createdAt: new Date(row.created_at).getTime(),
+        updatedAt: new Date(row.updated_at).getTime(),
+      }));
+
+      return { data: mapped, error: null };
+    } catch (err) {
+      return { data: [], error: err instanceof Error ? err.message : 'Failed to fetch collections.' };
+    }
+  },
+
+  /**
+   * Create collection in Supabase
+   */
+  async createCloudCollection(
+    name: string,
+    userId: string,
+    visibility: 'public' | 'private' = 'private',
+    description?: string
+  ): Promise<{ data: CollectionItem | null; error: string | null }> {
+    try {
+      const trimmed = name.trim();
+      if (!trimmed) {
+        return { data: null, error: 'Collection name is required.' };
+      }
+      if (trimmed.length > 100) {
+        return { data: null, error: 'Collection name must be 100 characters or fewer.' };
+      }
+
+      const authorId = userId && isValidUUID(userId) ? userId : COMMUNITY_AUTHOR_FALLBACK;
+      const { data, error } = await supabase
+        .from('collections')
+        .insert([{
+          name: trimmed,
+          description: description?.trim() || null,
+          visibility,
+          user_id: authorId,
+        }])
+        .select('*')
+        .single();
+
+      if (error) return { data: null, error: error.message };
+
+      return {
+        data: {
+          id: data.id,
+          name: data.name,
+          description: data.description || undefined,
+          visibility: data.visibility,
+          userId: data.user_id,
+          createdAt: new Date(data.created_at).getTime(),
+          updatedAt: new Date(data.updated_at).getTime(),
+        },
+        error: null,
+      };
+    } catch (err) {
+      return { data: null, error: err instanceof Error ? err.message : 'Failed to create collection.' };
+    }
+  },
+
+  /**
+   * Add prompt membership to collection in Supabase
+   */
+  async addPromptToCloudCollection(
+    collectionId: string,
+    promptId: string
+  ): Promise<{ success: boolean; error: string | null }> {
+    try {
+      const { error } = await supabase
+        .from('collection_memberships')
+        .insert([{ collection_id: collectionId, prompt_id: promptId }]);
+      if (error && error.code !== '23505') { // ignore duplicate key
+        return { success: false, error: error.message };
+      }
+      return { success: true, error: null };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : 'Failed to add prompt to collection.' };
+    }
+  },
+
+  /**
+   * Remove prompt membership from collection in Supabase
+   */
+  async removePromptFromCloudCollection(
+    collectionId: string,
+    promptId: string
+  ): Promise<{ success: boolean; error: string | null }> {
+    try {
+      const { error } = await supabase
+        .from('collection_memberships')
+        .delete()
+        .eq('collection_id', collectionId)
+        .eq('prompt_id', promptId);
+      if (error) return { success: false, error: error.message };
+      return { success: true, error: null };
+    } catch (err) {
+      return { success: false, error: err instanceof Error ? err.message : 'Failed to remove prompt from collection.' };
     }
   },
 };

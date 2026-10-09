@@ -41,10 +41,10 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
         <div className="confirm-modal-header">
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span className="material-symbols-outlined" style={{ color: 'var(--error)', fontSize: '20px' }}>
-              warning
+              delete
             </span>
-            <h2 id="confirm-delete-heading" className="font-headline-sm" style={{ color: 'var(--error)' }}>
-              Delete Prompt Archetype?
+            <h2 id="confirm-delete-heading" className="font-headline-sm" style={{ color: 'var(--on-surface)' }}>
+              Delete Prompt?
             </h2>
           </div>
           <button
@@ -64,9 +64,6 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
             Are you sure you want to delete{' '}
             <strong style={{ color: 'var(--on-surface)' }}>&ldquo;{prompt.title}&rdquo;</strong>?
           </p>
-          <div className="confirm-warning-callout">
-            This action immediately deletes the record from your browser local storage. This action cannot be undone.
-          </div>
         </div>
 
         <div className="confirm-modal-footer">
@@ -83,7 +80,7 @@ export const ConfirmModal: React.FC<ConfirmModalProps> = ({
             id="confirm-delete-btn"
             onClick={onConfirm}
           >
-            Permanently Delete
+            Delete
           </button>
         </div>
       </div>

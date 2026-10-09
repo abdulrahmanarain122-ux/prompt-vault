@@ -1,6 +1,7 @@
-import type { PromptItem, PromptFormInput, StorageStatus } from '../types/prompt';
+import type { PromptItem, PromptFormInput, StorageStatus, CollectionItem } from '../types/prompt';
 
 const STORAGE_KEY = 'prompt_vault_records_v3';
+const COLLECTIONS_STORAGE_KEY = 'prompt_vault_collections_v1';
 const LEGACY_STORAGE_KEYS = ['prompt_vault_records_v2', 'prompt_vault_records_v1'];
 
 export const STARTER_PROMPTS: PromptItem[] = [
@@ -281,7 +282,6 @@ export const StorageService = {
   create(input: PromptFormInput): PromptItem {
     const trimmedTitle = input.title.trim();
     const trimmedCategory = input.category.trim();
-    const trimmedBody = input.body.trim();
 
     if (!trimmedTitle) {
       throw new Error('Prompt title is required.');
@@ -289,7 +289,7 @@ export const StorageService = {
     if (!trimmedCategory) {
       throw new Error('Category is required.');
     }
-    if (!trimmedBody) {
+    if (!input.body || input.body.length === 0) {
       throw new Error('Prompt content cannot be empty.');
     }
 
@@ -297,12 +297,13 @@ export const StorageService = {
       id: generateId(),
       title: trimmedTitle,
       category: trimmedCategory,
-      body: trimmedBody,
+      body: input.body, // Preserved exactly as canonical text
       engine: input.engine,
       aspectRatio: input.aspectRatio,
       tags: input.tags,
-      negativePrompt: input.negativePrompt,
+      negativePrompt: input.negativePrompt, // Preserved exactly
       visibility: input.visibility || 'private',
+      collectionIds: input.collectionIds || [],
       isFavorite: false,
       copyCount: 0,
       createdAt: Date.now(),
@@ -318,7 +319,6 @@ export const StorageService = {
   update(id: string, input: PromptFormInput): PromptItem {
     const trimmedTitle = input.title.trim();
     const trimmedCategory = input.category.trim();
-    const trimmedBody = input.body.trim();
 
     if (!trimmedTitle) {
       throw new Error('Prompt title is required.');
@@ -326,7 +326,7 @@ export const StorageService = {
     if (!trimmedCategory) {
       throw new Error('Category is required.');
     }
-    if (!trimmedBody) {
+    if (!input.body || input.body.length === 0) {
       throw new Error('Prompt content cannot be empty.');
     }
 
@@ -341,12 +341,13 @@ export const StorageService = {
       ...existing,
       title: trimmedTitle,
       category: trimmedCategory,
-      body: trimmedBody,
+      body: input.body, // Preserved exactly
       engine: input.engine ?? existing.engine,
       aspectRatio: input.aspectRatio ?? existing.aspectRatio,
       tags: input.tags ?? existing.tags,
-      negativePrompt: input.negativePrompt ?? existing.negativePrompt,
+      negativePrompt: input.negativePrompt !== undefined ? input.negativePrompt : existing.negativePrompt,
       visibility: input.visibility ?? existing.visibility ?? 'private',
+      collectionIds: input.collectionIds !== undefined ? input.collectionIds : (existing.collectionIds || []),
       updatedAt: Date.now(),
     };
 
@@ -485,5 +486,192 @@ export const StorageService = {
     const mergedList = Array.from(currentMap.values());
     this.saveAll(mergedList);
     return { added, updated, total: mergedList.length };
+  },
+
+  getCollections(userId?: string): CollectionItem[] {
+    if (!this.isSupported()) return [];
+    try {
+      const raw = window.localStorage.getItem(COLLECTIONS_STORAGE_KEY);
+      if (!raw) return [];
+      const parsed: CollectionItem[] = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      // If signed out, only return public collections
+      if (!userId) {
+        return parsed.filter((c) => c.visibility === 'public');
+      }
+      // If signed in, return user's own collections + public collections
+      return parsed.filter((c) => c.visibility === 'public' || c.userId === userId);
+    } catch {
+      return [];
+    }
+  },
+
+  getCollectionById(collectionId: string, viewingUserId?: string): CollectionItem | null {
+    const list = this.getCollections(viewingUserId);
+    return list.find((c) => c.id === collectionId) || null;
+  },
+
+  saveCollections(collections: CollectionItem[]): boolean {
+    if (!this.isSupported()) return false;
+    try {
+      window.localStorage.setItem(COLLECTIONS_STORAGE_KEY, JSON.stringify(collections));
+      return true;
+    } catch {
+      return false;
+    }
+  },
+
+  createCollection(input: {
+    name: string;
+    description?: string;
+    userId?: string;
+    visibility?: 'public' | 'private';
+  }): CollectionItem {
+    if (!input.userId) {
+      throw new Error('Signed-out visitors cannot create collections. Please sign in.');
+    }
+    const trimmed = input.name.trim();
+    if (!trimmed) {
+      throw new Error('Collection name cannot be blank.');
+    }
+    if (trimmed.length > 100) {
+      throw new Error('Collection name must be 100 characters or fewer.');
+    }
+
+    const current = this.getCollections(input.userId);
+    const existing = current.find(
+      (c) => c.userId === input.userId && c.name.toLowerCase() === trimmed.toLowerCase()
+    );
+    if (existing) {
+      throw new Error(`A collection named "${trimmed}" already exists.`);
+    }
+
+    const newCollection: CollectionItem = {
+      id: generateId(),
+      name: trimmed,
+      description: input.description?.trim(),
+      visibility: input.visibility || 'private', // private by default
+      userId: input.userId,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    };
+
+    let allCols: CollectionItem[] = [];
+    try {
+      const raw = window.localStorage.getItem(COLLECTIONS_STORAGE_KEY);
+      if (raw) allCols = JSON.parse(raw);
+      if (!Array.isArray(allCols)) allCols = [];
+    } catch {
+      allCols = [];
+    }
+
+    allCols.push(newCollection);
+    this.saveCollections(allCols);
+    return newCollection;
+  },
+
+  addPromptToCollection(promptId: string, collectionId: string, actingUserId?: string): PromptItem {
+    if (!actingUserId) {
+      throw new Error('You must be signed in to manage collections.');
+    }
+
+    let allCols: CollectionItem[] = [];
+    try {
+      const raw = window.localStorage.getItem(COLLECTIONS_STORAGE_KEY);
+      if (raw) allCols = JSON.parse(raw);
+      if (!Array.isArray(allCols)) allCols = [];
+    } catch {
+      allCols = [];
+    }
+    const col = allCols.find((c) => c.id === collectionId);
+    if (!col) {
+      throw new Error('Collection not found.');
+    }
+    if (col.userId !== actingUserId) {
+      throw new Error('Unauthorized: You can only add prompts to collections you own.');
+    }
+
+    // Verify prompt exists and acting user has access
+    const prompts = this.getAll();
+    const prompt = prompts.find((p) => p.id === promptId);
+    if (!prompt) {
+      throw new Error('Prompt not found.');
+    }
+    if (prompt.visibility !== 'public' && prompt.userId && prompt.userId !== actingUserId) {
+      throw new Error('Unauthorized: Cannot add private prompt belonging to another user.');
+    }
+
+    const existingIds = prompt.collectionIds || [];
+    if (existingIds.includes(collectionId)) {
+      return prompt;
+    }
+
+    const updatedPrompt: PromptItem = {
+      ...prompt,
+      collectionIds: [...existingIds, collectionId],
+      updatedAt: Date.now(),
+    };
+
+    const index = prompts.findIndex((p) => p.id === promptId);
+    prompts[index] = updatedPrompt;
+    this.saveAll(prompts);
+    return updatedPrompt;
+  },
+
+  removePromptFromCollection(promptId: string, collectionId: string, actingUserId?: string): PromptItem {
+    if (!actingUserId) {
+      throw new Error('You must be signed in to manage collections.');
+    }
+
+    let allCols: CollectionItem[] = [];
+    try {
+      const raw = window.localStorage.getItem(COLLECTIONS_STORAGE_KEY);
+      if (raw) allCols = JSON.parse(raw);
+      if (!Array.isArray(allCols)) allCols = [];
+    } catch {
+      allCols = [];
+    }
+    const col = allCols.find((c) => c.id === collectionId);
+    if (!col) {
+      throw new Error('Collection not found.');
+    }
+    if (col.userId !== actingUserId) {
+      throw new Error('Unauthorized: You can only remove prompts from collections you own.');
+    }
+
+    const prompts = this.getAll();
+    const prompt = prompts.find((p) => p.id === promptId);
+    if (!prompt) {
+      throw new Error('Prompt not found.');
+    }
+
+    const existingIds = prompt.collectionIds || [];
+    const updatedPrompt: PromptItem = {
+      ...prompt,
+      collectionIds: existingIds.filter((id) => id !== collectionId),
+    };
+
+    const index = prompts.findIndex((p) => p.id === promptId);
+    prompts[index] = updatedPrompt;
+    this.saveAll(prompts);
+    return updatedPrompt;
+  },
+
+  getAccessibleMemberPrompts(collectionId: string, viewingUserId?: string): PromptItem[] {
+    const col = this.getCollectionById(collectionId, viewingUserId);
+    if (!col) return [];
+
+    const prompts = this.getAll();
+    return prompts.filter((p) => {
+      if (!p.collectionIds || !p.collectionIds.includes(collectionId)) return false;
+      // Member prompt must be public OR owned by the viewer
+      if (p.visibility === 'public') return true;
+      if (viewingUserId && p.userId === viewingUserId) return true;
+      return false; // Unauthorized viewer cannot see private member
+    });
+  },
+
+  getAccessibleMemberCount(collectionId: string, viewingUserId?: string): number {
+    return this.getAccessibleMemberPrompts(collectionId, viewingUserId).length;
   },
 };
