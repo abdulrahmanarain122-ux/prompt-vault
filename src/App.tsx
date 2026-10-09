@@ -16,7 +16,7 @@ import { CloudPromptService } from './services/cloudPromptService';
 import type { ActiveViewMode } from './components/Sidebar';
 
 const AppContent: React.FC = () => {
-  const { user, openAuthModal } = useAuth();
+  const { user } = useAuth();
   const [activeViewMode, setActiveViewMode] = useState<ActiveViewMode>('vault');
   const [publicPrompts, setPublicPrompts] = useState<PromptItem[]>([]);
   const [prompts, setPrompts] = useState<PromptItem[]>([]);
@@ -324,11 +324,7 @@ const AppContent: React.FC = () => {
   };
 
   const handleForkPrompt = async (prompt: PromptItem) => {
-    if (!user) {
-      openAuthModal('login');
-      addToast('Please sign in to fork community prompts to your vault.', 'error');
-      return;
-    }
+    if (!user) return;
     try {
       const { data, error } = await CloudPromptService.forkPrompt(prompt, user.id);
       if (error || !data) {
@@ -396,12 +392,6 @@ const AppContent: React.FC = () => {
   const handleToggleVisibility = async (prompt: PromptItem) => {
     const nextVis: 'public' | 'private' = prompt.visibility === 'public' ? 'private' : 'public';
 
-    if (nextVis === 'public' && !user) {
-      openAuthModal('login');
-      addToast('Please sign in to publish prompts to the Public Community.', 'error');
-      return;
-    }
-
     try {
       StorageService.updateVisibility(prompt.id, nextVis);
       setPrompts((prev) => prev.map((p) => (p.id === prompt.id ? { ...p, visibility: nextVis } : p)));
@@ -440,10 +430,7 @@ const AppContent: React.FC = () => {
   };
 
   const handleSyncCloud = async () => {
-    if (!user) {
-      openAuthModal('login');
-      return;
-    }
+    if (!user) return;
     addToast('Syncing local vault to cloud...', 'success');
     const { syncedCount, error } = await CloudPromptService.syncLocalStorageToCloud(prompts, user.id);
     if (error) {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import type { PromptItem, PromptFormInput } from '../types/prompt';
 
 interface PromptModalProps {
@@ -185,7 +185,7 @@ export const PromptModal: React.FC<PromptModalProps> = ({
               value={category}
               onChange={handleCategorySelectChange}
             >
-              {allCategoryOptions.map((opt) => (
+              {allCategoryOptions.map((opt: string) => (
                 <option key={opt} value={opt}>
                   {opt}
                 </option>

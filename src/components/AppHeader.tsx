@@ -16,7 +16,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
   onToggleMobileSidebar,
   onSyncCloud,
 }) => {
-  const { user, profile, openAuthModal, signOut } = useAuth();
+  const { user, profile } = useAuth();
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -83,7 +83,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
         </button>
 
         {/* Auth / Account Profile Controller */}
-        {user ? (
+        {user && (
           <div className="user-profile-menu" ref={dropdownRef}>
             <div
               className="header-workspace-user"
@@ -135,18 +135,6 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
               </div>
             )}
           </div>
-        ) : (
-          <button
-            type="button"
-            className="btn-toolbar-new"
-            onClick={() => openAuthModal('login')}
-            style={{ backgroundColor: 'var(--surface-container-high)', color: 'var(--on-surface)', border: '1px solid var(--border-subtle)' }}
-          >
-            <span className="material-symbols-outlined" style={{ fontSize: '16px', color: 'var(--primary)' }}>
-              account_circle
-            </span>
-            <span>Sign In</span>
-          </button>
         )}
       </div>
     </header>

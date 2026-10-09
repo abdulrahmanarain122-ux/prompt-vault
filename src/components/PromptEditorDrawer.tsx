@@ -30,8 +30,6 @@ const PRESET_ASPECT_RATIOS = [
   '4:5 (Instagram Frame)',
 ];
 
-import { useAuth } from '../context/AuthContext';
-
 export const PromptEditorDrawer: React.FC<PromptEditorDrawerProps> = ({
   isOpen,
   onClose,
@@ -41,7 +39,6 @@ export const PromptEditorDrawer: React.FC<PromptEditorDrawerProps> = ({
   availableEngines,
 }) => {
   const engineOptions = availableEngines && availableEngines.length > 0 ? availableEngines : PRESET_ENGINES;
-  const { user, openAuthModal } = useAuth();
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState(PRESET_CATEGORIES[0]);
   const [engine, setEngine] = useState(PRESET_ENGINES[0]);
@@ -262,13 +259,7 @@ export const PromptEditorDrawer: React.FC<PromptEditorDrawerProps> = ({
               <button
                 type="button"
                 className={`visibility-toggle-btn ${visibility === 'public' ? 'active' : ''}`}
-                onClick={() => {
-                  if (!user) {
-                    openAuthModal('login');
-                    return;
-                  }
-                  setVisibility('public');
-                }}
+                onClick={() => setVisibility('public')}
               >
                 <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>
                   public
@@ -276,21 +267,6 @@ export const PromptEditorDrawer: React.FC<PromptEditorDrawerProps> = ({
                 <span>Public Community</span>
               </button>
             </div>
-            {!user && (
-              <p className="font-code-sm" style={{ color: 'var(--outline)', marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                <span className="material-symbols-outlined" style={{ fontSize: '14px', color: 'var(--primary-container)' }}>info</span>
-                <span>
-                  <button
-                    type="button"
-                    onClick={() => openAuthModal('login')}
-                    style={{ background: 'none', border: 'none', color: 'var(--primary-container)', cursor: 'pointer', padding: 0, textDecoration: 'underline' }}
-                  >
-                    Sign in
-                  </button>{' '}
-                  is required to publish prompts for the community.
-                </span>
-              </p>
-            )}
           </div>
 
           {/* Archetype Category Selector */}
