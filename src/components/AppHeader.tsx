@@ -111,10 +111,10 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
               <div className="user-menu-dropdown">
                 <div className="user-menu-header">
                   <span className="font-label-sm" style={{ color: 'var(--on-surface)', fontWeight: 600 }}>
-                    {user.email}
+                    Anonymous Session
                   </span>
                   <span className="font-code-sm" style={{ color: 'var(--outline)' }}>
-                    Signed in to Cloud Vault
+                    Device ID active
                   </span>
                 </div>
                 {onSyncCloud && (
@@ -132,19 +132,6 @@ export const AppHeader: React.FC<AppHeaderProps> = ({
                     <span>Backup Vault to Cloud</span>
                   </button>
                 )}
-                <button
-                  type="button"
-                  className="user-menu-item danger"
-                  onClick={async () => {
-                    setDropdownOpen(false);
-                    await signOut();
-                  }}
-                >
-                  <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>
-                    logout
-                  </span>
-                  <span>Sign Out</span>
-                </button>
               </div>
             )}
           </div>

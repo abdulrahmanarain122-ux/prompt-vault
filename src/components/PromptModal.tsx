@@ -31,13 +31,14 @@ export const PromptModal: React.FC<PromptModalProps> = ({
 
   const titleInputRef = useRef<HTMLInputElement>(null);
 
-  const allCategoryOptions = Array.from(
+  const allCategoryOptions = useMemo(() => Array.from(
     new Set([...PRESET_CATEGORIES, ...availableCategories.filter((c) => c !== 'All')])
-  );
+  ), [availableCategories]);
 
   useEffect(() => {
     if (isOpen) {
       if (initialPrompt) {
+        // eslint-disable-next-line react/set-state-in-effect
         setTitle(initialPrompt.title);
         setBody(initialPrompt.body);
         if (allCategoryOptions.includes(initialPrompt.category)) {
@@ -59,7 +60,7 @@ export const PromptModal: React.FC<PromptModalProps> = ({
       setErrors({});
       setTimeout(() => titleInputRef.current?.focus(), 50);
     }
-  }, [isOpen, initialPrompt]);
+  }, [isOpen, initialPrompt, allCategoryOptions]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

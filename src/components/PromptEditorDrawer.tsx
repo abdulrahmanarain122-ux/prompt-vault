@@ -59,6 +59,7 @@ export const PromptEditorDrawer: React.FC<PromptEditorDrawerProps> = ({
   useEffect(() => {
     if (isOpen) {
       if (initialPrompt) {
+        // eslint-disable-next-line react/set-state-in-effect
         setTitle(initialPrompt.title);
         setBody(initialPrompt.body);
         setVisibility(initialPrompt.visibility || 'private');
@@ -94,29 +95,7 @@ export const PromptEditorDrawer: React.FC<PromptEditorDrawerProps> = ({
     }
   }, [isOpen, initialPrompt]);
 
-  // Keyboard shortcut: Escape to close, Ctrl+S / Cmd+S to save
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (!isOpen) return;
-
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        onClose();
-      }
-
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
-        e.preventDefault();
-        handleSave();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, title, category, engine, aspectRatio, body, negativePrompt, tags]);
-
-  if (!isOpen) return null;
-
-  const handleSave = () => {
+  const handleSave = React.useCallback(() => {
     const newErrors: { title?: string; body?: string } = {};
     const trimmedTitle = title.trim();
     const trimmedBody = body.trim();
@@ -151,7 +130,29 @@ export const PromptEditorDrawer: React.FC<PromptEditorDrawerProps> = ({
     );
 
     onClose();
-  };
+  }, [title, body, category, engine, aspectRatio, negativePrompt, tags, visibility, initialPrompt, onSubmit, onClose]);
+
+  // Keyboard shortcut: Escape to close, Ctrl+S / Cmd+S to save
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!isOpen) return;
+
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        onClose();
+      }
+
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        handleSave();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose, handleSave]);
+
+  if (!isOpen) return null;
 
   const handleAddTag = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' || e.key === ',') {

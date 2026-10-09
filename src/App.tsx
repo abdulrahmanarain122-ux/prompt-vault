@@ -12,7 +12,6 @@ import { StatusBar } from './components/StatusBar';
 import { Toast } from './components/Toast';
 import type { ToastMessage } from './components/Toast';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { AuthModal } from './components/AuthModal';
 import { CloudPromptService } from './services/cloudPromptService';
 import type { ActiveViewMode } from './components/Sidebar';
 
@@ -77,6 +76,7 @@ const AppContent: React.FC = () => {
   useEffect(() => {
     try {
       const loaded = StorageService.getAll();
+      // eslint-disable-next-line react/set-state-in-effect
       setPrompts(loaded);
       if (loaded.length > 0) {
         setSelectedPromptId(loaded[0].id);
@@ -349,7 +349,7 @@ const AppContent: React.FC = () => {
       refreshStorage();
       addToast(`Forked "${prompt.title}" to your personal vault!`, 'success');
       setActiveViewMode('vault');
-    } catch (err) {
+    } catch {
       addToast('Could not fork prompt', 'error');
     }
   };
@@ -434,7 +434,7 @@ const AppContent: React.FC = () => {
           : `"${prompt.title}" is now Private Vault.`,
         'success'
       );
-    } catch (err) {
+    } catch {
       addToast('Failed to change visibility', 'error');
     }
   };
@@ -677,9 +677,7 @@ const AppContent: React.FC = () => {
       {/* Toast Notification Queue */}
       <Toast toasts={toasts} onDismiss={dismissToast} />
 
-      {/* Supabase Authentication Modal */}
-      <AuthModal onNotify={addToast} />
-    </div>
+      </div>
   );
 };
 

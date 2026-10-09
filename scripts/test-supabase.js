@@ -55,7 +55,7 @@ async function runCheck() {
 
   // 2. Prompts Table Check
   try {
-    const { data, error, status } = await supabase.from('prompts').select('id, title, visibility').limit(3);
+    const { data, error } = await supabase.from('prompts').select('id, title, visibility').limit(3);
     if (error) {
       console.log(`❌ 2. Table "public.prompts": NOT FOUND (${error.code}: ${error.message})`);
       allPassed = false;

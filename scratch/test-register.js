@@ -45,7 +45,7 @@ async function testRegister() {
     console.log('✅ SignUp Session active?:', Boolean(data.session));
 
     // Try signing in immediately
-    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+    const { error: signInError } = await supabase.auth.signInWithPassword({
       email: testEmail,
       password: testPassword,
     });

@@ -64,7 +64,7 @@ async function testCloudService() {
 
   // Test 3: Check Schema columns compatibility
   try {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('prompts')
       .select('id, user_id, title, category, body, visibility, engine, aspect_ratio, negative_prompt, tags, copy_count, created_at, updated_at')
       .limit(1);

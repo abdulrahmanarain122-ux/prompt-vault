@@ -1,11 +1,14 @@
 import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+const defaultUrl = 'https://jkyqvvdirtdxwcnzhcki.supabase.co';
+const defaultKey = 'sb_publishable_s3-rLrxxGY-8jBgN9K4s2A_sdaPSHV7';
+
+const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string | undefined) || defaultUrl;
+const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined) || defaultKey;
 
 const sanitizedUrl = supabaseUrl
   ? supabaseUrl.trim().replace(/\/rest\/v1\/?$/, '').replace(/\/+$/, '')
-  : undefined;
+  : defaultUrl;
 
 /**
  * Returns true if real Supabase environment variables are provided.
@@ -21,9 +24,9 @@ export function isSupabaseConfigured(): boolean {
   );
 }
 
-// Fallback placeholder credentials if not yet configured, preventing constructor crash
-const fallbackUrl = 'https://placeholder-vault.supabase.co';
-const fallbackKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.placeholder';
+// Fallback credentials if not yet configured, preventing constructor crash
+const fallbackUrl = defaultUrl;
+const fallbackKey = defaultKey;
 
 export const supabase: SupabaseClient = createClient(
   isSupabaseConfigured() ? sanitizedUrl! : fallbackUrl,

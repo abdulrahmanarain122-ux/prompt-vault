@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useEffect, useState, useMemo } from 'react';
+/* eslint-disable react-refresh/only-export-components */
+import React, { createContext, useContext, useEffect, useState } from 'react';
 import type { User, Session } from '@supabase/supabase-js';
-import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
 
 export interface UserProfile {
   id: string;
@@ -32,153 +32,51 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Generate a valid UUID v4 fallback
+function uuidv4() {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, c =>
+    (Number(c) ^ crypto.getRandomValues(new Uint8Array(1))[0] & 15 >> Number(c) / 4).toString(16)
+  );
+}
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [authModalOpen, setAuthModalOpen] = useState(false);
-  const [authModalMode, setAuthModalMode] = useState<AuthModalMode>('login');
-
-  const isConfigured = useMemo(() => isSupabaseConfigured(), []);
-
-  // Fetch public user profile from profiles table
-  const fetchProfile = async (userId: string) => {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
-
-      if (!error && data) {
-        setProfile(data as UserProfile);
-      }
-    } catch {
-      // ignore
-    }
-  };
 
   useEffect(() => {
-    if (!isConfigured) {
-      setIsLoading(false);
-      return;
+    let deviceId = localStorage.getItem('prompt_vault_device_id');
+    if (!deviceId) {
+      deviceId = uuidv4();
+      localStorage.setItem('prompt_vault_device_id', deviceId);
     }
+    
+    const fakeUser = {
+      id: deviceId,
+      email: 'guest@local',
+      user_metadata: { username: 'Guest', display_name: 'Guest' },
+      app_metadata: {},
+      aud: 'authenticated',
+      created_at: new Date().toISOString(),
+    } as unknown as User;
 
-    // Check current active session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchProfile(session.user.id);
-      }
-      setIsLoading(false);
-    });
+    const fakeSession = {
+      access_token: 'local_device',
+      refresh_token: 'local_device',
+      expires_in: 36000000,
+      token_type: 'bearer',
+      user: fakeUser,
+    } as unknown as Session;
 
-    // Listen for auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          fetchProfile(session.user.id);
-        } else {
-          setProfile(null);
-        }
-        setIsLoading(false);
-      }
-    );
-
-    return () => {
-      subscription.unsubscribe();
-    };
-  }, [isConfigured]);
-
-  const openAuthModal = (mode: AuthModalMode = 'login') => {
-    setAuthModalMode(mode);
-    setAuthModalOpen(true);
-  };
-
-  const closeAuthModal = () => {
-    setAuthModalOpen(false);
-  };
-
-  const signIn = async (email: string, password: string) => {
-    try {
-      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) {
-        if (error.message.toLowerCase().includes('confirm')) {
-          return {
-            error: new Error(
-              'Email not confirmed. Check your inbox or turn off "Confirm Email" in Supabase Dashboard -> Authentication -> Email Provider for instant access.'
-            ),
-          };
-        }
-        return { error: error as Error };
-      }
-      return { error: null, session: data.session };
-    } catch (err) {
-      return { error: err as Error };
-    }
-  };
-
-  const signUp = async (email: string, password: string, username?: string) => {
-    try {
-      const cleanUsername = username?.trim() || email.split('@')[0];
-      const { data, error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: {
-            username: cleanUsername,
-            display_name: cleanUsername,
-          },
-        },
-      });
-
-      if (error) {
-        if (error.message.includes('rate limit') || error.message.includes('over_email_send')) {
-          return {
-            error: new Error(
-              'Supabase SMTP rate limit reached. To enable instant registration without limits, turn off "Confirm Email" in Supabase Dashboard -> Authentication -> Email Provider.'
-            ),
-          };
-        }
-        return { error: error as Error };
-      }
-
-      // Check if user already exists in Supabase
-      if (data.user && data.user.identities && data.user.identities.length === 0) {
-        return {
-          error: new Error('An account with this email address already exists. Click "Sign In" above to log in.'),
-        };
-      }
-
-      // Attempt auto-login if session was not returned automatically
-      if (!data.session) {
-        const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-        if (!signInError && signInData.session) {
-          return { error: null, session: signInData.session, needsConfirmation: false };
-        }
-      }
-
-      return { error: null, session: data.session, needsConfirmation: !data.session };
-    } catch (err) {
-      return { error: err as Error };
-    }
-  };
-
-  const signOut = async () => {
-    try {
-      const { error } = await supabase.auth.signOut();
-      return { error: error as Error | null };
-    } catch (err) {
-      return { error: err as Error };
-    }
-  };
+    setUser(fakeUser);
+    setSession(fakeSession);
+    setProfile({ id: deviceId, username: 'Guest', display_name: 'Guest', avatar_url: null });
+    setIsLoading(false);
+  }, []);
 
   return (
     <AuthContext.Provider
@@ -187,14 +85,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         session,
         profile,
         isLoading,
-        isConfigured,
-        authModalOpen,
-        authModalMode,
-        openAuthModal,
-        closeAuthModal,
-        signIn,
-        signUp,
-        signOut,
+        isConfigured: true,
+        authModalOpen: false,
+        authModalMode: 'login',
+        openAuthModal: () => {},
+        closeAuthModal: () => {},
+        signIn: async () => ({ error: null, session }),
+        signUp: async () => ({ error: null, session }),
+        signOut: async () => ({ error: null }),
       }}
     >
       {children}

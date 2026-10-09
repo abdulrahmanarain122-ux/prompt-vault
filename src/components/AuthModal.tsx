@@ -18,6 +18,7 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onNotify }) => {
   const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
+    // eslint-disable-next-line react/set-state-in-effect
     setMode(authModalMode === 'signup' ? 'signup' : 'login');
     setErrorMessage('');
     setEmail('');
