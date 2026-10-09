@@ -12,7 +12,7 @@ import { StatusBar } from './components/StatusBar';
 import { Toast } from './components/Toast';
 import type { ToastMessage } from './components/Toast';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { CloudPromptService } from './services/cloudPromptService';
+import { CloudPromptService, isValidUUID } from './services/cloudPromptService';
 import type { ActiveViewMode } from './components/Sidebar';
 
 const AppContent: React.FC = () => {
@@ -300,17 +300,21 @@ const AppContent: React.FC = () => {
         addToast(`Updated "${updated.title}" successfully!`, 'success');
         setSelectedPromptId(updated.id);
 
-        if (user) {
+        if (input.visibility === 'public') {
+          await CloudPromptService.upsertCloudPrompt(updated, user?.id);
+        } else if (isValidUUID(editId)) {
           await CloudPromptService.updateCloudPrompt(editId, input);
         }
+        const { data: updatedPublic } = await CloudPromptService.fetchPublicPrompts();
+        if (updatedPublic) setPublicPrompts(updatedPublic);
       } else {
         const created = StorageService.create(input);
         setPrompts((prev) => [created, ...prev]);
         setSelectedPromptId(created.id);
 
-        if (user) {
-          const { data: cloudCreated } = await CloudPromptService.createCloudPrompt(input, user.id);
-          if (cloudCreated && input.visibility === 'public') {
+        if (input.visibility === 'public') {
+          const { data: cloudCreated } = await CloudPromptService.upsertCloudPrompt(created, user?.id);
+          if (cloudCreated) {
             setPublicPrompts((prev) => [cloudCreated, ...prev]);
           }
         }
@@ -371,7 +375,7 @@ const AppContent: React.FC = () => {
   const handleRestoreStarters = () => {
     if (
       window.confirm(
-        'Reset vault back to initial motion and video starter prompts? Any current custom prompts will be replaced.'
+        'Reset vault back to initial interactive starter prompts? Any current custom prompts will be replaced.'
       )
     ) {
       const restored = StorageService.resetToStarters();
@@ -382,7 +386,7 @@ const AppContent: React.FC = () => {
       setSelectedAspectRatio('');
       setSearchQuery('');
       refreshStorage();
-      addToast('Restored motion & video starter prompts.', 'success');
+      addToast('Restored interactive starter prompts.', 'success');
       if (restored.length > 0) {
         setSelectedPromptId(restored[0].id);
       }
@@ -393,37 +397,33 @@ const AppContent: React.FC = () => {
     const nextVis: 'public' | 'private' = prompt.visibility === 'public' ? 'private' : 'public';
 
     try {
-      StorageService.updateVisibility(prompt.id, nextVis);
+      const updatedLocal = StorageService.updateVisibility(prompt.id, nextVis);
       setPrompts((prev) => prev.map((p) => (p.id === prompt.id ? { ...p, visibility: nextVis } : p)));
 
-      if (user) {
-        const { error } = await CloudPromptService.updateCloudPrompt(prompt.id, { visibility: nextVis });
-        if (error) {
-          await CloudPromptService.createCloudPrompt(
-            {
-              title: prompt.title,
-              category: prompt.category,
-              body: prompt.body,
-              engine: prompt.engine,
-              aspectRatio: prompt.aspectRatio,
-              tags: prompt.tags,
-              negativePrompt: prompt.negativePrompt,
-              visibility: nextVis,
-            },
-            user.id
-          );
-        }
+      const targetPrompt = updatedLocal || { ...prompt, visibility: nextVis };
 
-        const { data: updatedPublic } = await CloudPromptService.fetchPublicPrompts();
-        if (updatedPublic) setPublicPrompts(updatedPublic);
+      if (nextVis === 'public') {
+        const { data: cloudCreated, error: cloudErr } = await CloudPromptService.upsertCloudPrompt(
+          targetPrompt,
+          user?.id
+        );
+        if (cloudErr) {
+          addToast(`Cloud sync notice: ${cloudErr}`, 'error');
+        } else {
+          if (cloudCreated && cloudCreated.id !== prompt.id) {
+            StorageService.update(prompt.id, { ...prompt, visibility: 'public' });
+          }
+          addToast(`"${prompt.title}" is now published to Public Explore!`, 'success');
+        }
+      } else {
+        if (isValidUUID(prompt.id)) {
+          await CloudPromptService.updateCloudPrompt(prompt.id, { visibility: 'private' });
+        }
+        addToast(`"${prompt.title}" is now Private Vault.`, 'success');
       }
 
-      addToast(
-        nextVis === 'public'
-          ? `"${prompt.title}" is now Public Community!`
-          : `"${prompt.title}" is now Private Vault.`,
-        'success'
-      );
+      const { data: updatedPublic } = await CloudPromptService.fetchPublicPrompts();
+      if (updatedPublic) setPublicPrompts(updatedPublic);
     } catch {
       addToast('Failed to change visibility', 'error');
     }
@@ -488,6 +488,82 @@ const AppContent: React.FC = () => {
             totalFilteredCount={filteredPrompts.length}
             totalStoredCount={activeViewMode === 'explore' ? publicPrompts.length : prompts.length}
           />
+
+          {/* Explore Community Header & Category Selection Bar */}
+          {activeViewMode === 'explore' && (
+            <div className="explore-feed-banner">
+              <div className="explore-feed-headline">
+                <div className="explore-feed-pill">
+                  <span className="material-symbols-outlined" style={{ fontSize: '15px' }}>
+                    public
+                  </span>
+                  <span>Explore Community Feed</span>
+                </div>
+                <h2 className="explore-feed-title">Global Prompt Discoveries</h2>
+                <p className="explore-feed-desc">
+                  Browse, test, and fork AI prompts shared publicly by creators. Select a category below to filter video, image, or reasoning prompts.
+                </p>
+              </div>
+
+              {/* Category Filter Pills (Selection) */}
+              <div className="explore-category-filter-group" role="tablist" aria-label="Explore Categories">
+                <button
+                  type="button"
+                  className={`explore-category-pill ${selectedCategory === 'All' && !selectedFilter ? 'active' : ''}`}
+                  onClick={() => {
+                    setSelectedCategory('All');
+                    setSelectedFilter('');
+                  }}
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>view_list</span>
+                  <span>All Prompts</span>
+                  <span className="category-pill-count">{categoryCounts.total}</span>
+                </button>
+
+                <button
+                  type="button"
+                  className={`explore-category-pill ${selectedCategory.toLowerCase().includes('video') && !selectedFilter ? 'active' : ''}`}
+                  onClick={() => {
+                    setSelectedCategory('Video prompt');
+                    setSelectedFilter('');
+                  }}
+                  title="Filter to Video prompts"
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>movie</span>
+                  <span>Video Prompts</span>
+                  <span className="category-pill-count">{categoryCounts.video}</span>
+                </button>
+
+                <button
+                  type="button"
+                  className={`explore-category-pill ${selectedCategory.toLowerCase().includes('image') && !selectedFilter ? 'active' : ''}`}
+                  onClick={() => {
+                    setSelectedCategory('Image prompt');
+                    setSelectedFilter('');
+                  }}
+                  title="Filter to Image prompts"
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>image</span>
+                  <span>Image Prompts</span>
+                  <span className="category-pill-count">{categoryCounts.image}</span>
+                </button>
+
+                <button
+                  type="button"
+                  className={`explore-category-pill ${selectedCategory.toLowerCase().includes('other') && !selectedFilter ? 'active' : ''}`}
+                  onClick={() => {
+                    setSelectedCategory('Other');
+                    setSelectedFilter('');
+                  }}
+                  title="Filter to Other prompts"
+                >
+                  <span className="material-symbols-outlined" style={{ fontSize: '16px' }}>category</span>
+                  <span>Other Prompts</span>
+                  <span className="category-pill-count">{categoryCounts.other}</span>
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Primary Workspace Content Body: Gallery + Inspector */}
           <div className="workspace-content-body">
